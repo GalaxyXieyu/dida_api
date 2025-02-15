@@ -65,7 +65,7 @@ def format_field_types(field_types: Dict[str, Set[str]]) -> str:
 
 def main():
     # 初始化客户端
-    client = DidaClient(email="523018705@qq.com", password="X1i2e3y4u5")
+    client = DidaClient(email="your_email", password="your_password")
     
     print("正在分析API数据结构...")
     

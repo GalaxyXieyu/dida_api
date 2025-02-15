@@ -4,8 +4,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="dida365",
-    version="0.1.0",
+    name="didatodolist",
+    version="0.1.1",
     author="xieyu",
     author_email="523018705@qq.com",
     description="滴答清单(TickTick/Dida365) Python SDK",

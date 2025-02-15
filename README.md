@@ -1,51 +1,84 @@
 # 滴答清单 Python SDK
 
-## 项目简介
-这是一个用于访问滴答清单(TickTick/Dida365)API的Python SDK，提供了简单易用的接口来管理任务、项目和标签。
+这是一个非官方的滴答清单(TickTick/Dida365) Python SDK，用于访问滴答清单的API。
 
-## 功能特点
-- 完整的API封装，支持所有主要功能
-- 类型提示支持，便于开发
-- 详细的文档和示例
-- 异常处理机制
-- 支持批量操作
+## 安装
+
+```bash
+# 使用指定源安装（推荐）
+pip install didatodolist --index-url https://pypi.org/simple
+
+# 或者直接安装（如果默认源访问不了，请使用上面的命令）
+pip install didatodolist
+```
 
 ## 快速开始
 
-### 安装
-```bash
-pip install -r requirements.txt
+### 导入必要的类
+```python
+from dida import DidaClient, Task, Project, Tag  # 导入所需的所有类
 ```
 
-### 基础使用
+### 客户端初始化
 ```python
-from dida import DidaClient
-
 # 使用邮箱密码初始化
 client = DidaClient(email="your_email@example.com", password="your_password")
 
 # 或者使用token初始化
 client = DidaClient(token="your_token")
+```
 
+### 基础使用
+
+```python
 # 创建任务
 task = client.tasks.create(Task(
     title="测试任务",
     content="任务详细内容",
-    priority=3
+    priority=3  # 优先级：0-最低，1-低，3-中，5-高
 ))
 
 # 创建项目
 project = client.projects.create(Project(
     name="测试项目",
-    color="#FFD324"
+    color="#FFD324"  # 项目颜色，使用十六进制颜色代码
 ))
 
 # 创建标签
 tag = client.tags.create(Tag(
     name="重要",
-    color="#FF0000"
+    color="#FF0000"  # 标签颜色，使用十六进制颜色代码
 ))
 ```
+
+## 详细文档
+
+### Task 类参数说明
+- title: 任务标题（必填）
+- content: 任务内容（选填）
+- priority: 优先级（选填）
+  - 0: 最低
+  - 1: 低
+  - 3: 中
+  - 5: 高
+- start_date: 开始时间（选填）
+- due_date: 截止时间（选填）
+- project_id: 所属项目ID（选填）
+- tags: 标签列表（选填）
+
+### Project 类参数说明
+- name: 项目名称（必填）
+- color: 项目颜色（选填，十六进制颜色代码）
+
+### Tag 类参数说明
+- name: 标签名称（必填）
+- color: 标签颜色（选填，十六进制颜色代码）
+
+## 注意事项
+
+1. 所有的创建操作都需要先实例化对应的模型类（Task、Project、Tag），然后通过client的对应方法创建
+2. 颜色值使用标准的十六进制颜色代码（如 "#FF0000" 表示红色）
+3. 时间相关的字段支持多种格式，推荐使用 ISO 8601 格式（如 "2024-03-15T10:00:00.000+0000"）
 
 ## 项目结构
 ```
@@ -171,4 +204,4 @@ MIT License
 
 ## 联系方式
 - 作者：xieyu
-- 邮箱：523018705@qq.com 
+- 邮箱：your_email 

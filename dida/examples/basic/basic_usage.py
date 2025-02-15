@@ -17,7 +17,7 @@ from datetime import datetime
 def main():
     # 初始化客户端
     # 方式1：使用邮箱和密码
-    client = DidaClient(email="523018705@qq.com", password="X1i2e3y4u5")
+    client = DidaClient(email="your_email", password="your_password")
     
     # 方式2：使用token
     # client = DidaClient(token="your_token")

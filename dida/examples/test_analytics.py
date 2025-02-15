@@ -6,7 +6,7 @@ from dida.examples.advanced.task_analytics import TaskAnalytics
 
 def main():
     # 初始化客户端
-    client = DidaClient(email="523018705@qq.com", password="X1i2e3y4u5")
+    client = DidaClient(email="your_email", password="your_password")
     
     # 创建任务分析器
     analytics = TaskAnalytics(client)
