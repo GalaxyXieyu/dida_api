@@ -45,4 +45,10 @@ _build/
 
 # 系统
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Sensitive Data
+original_api/data/tasks_wide_table.csv
+
+# Logs
+*.log 
