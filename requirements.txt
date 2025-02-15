@@ -1,0 +1,9 @@
+requests>=2.25.0
+python-dateutil>=2.8.0
+dataclasses;python_version<'3.7'
+pytest>=7.0.0  # 用于运行测试
+pytest-cov>=4.0.0  # 用于生成测试覆盖率报告
+black>=22.0.0  # 用于代码格式化
+isort>=5.0.0  # 用于导入排序
+mypy>=1.0.0  # 用于类型检查
+pylint>=2.17.0  # 用于代码质量检查 

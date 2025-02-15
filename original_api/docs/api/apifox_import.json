@@ -1,0 +1,181 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "滴答清单API",
+    "version": "1.0.0",
+    "description": "滴答清单(TickTick/Dida)的API接口文档，支持任务、项目、标签等功能的管理。",
+    "contact": {
+      "name": "滴答清单API文档",
+      "url": "https://dida365.com/api"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://dida365.com/api/v2",
+      "description": "生产环境"
+    }
+  ],
+  "tags": [
+    {
+      "name": "认证",
+      "description": "用户认证相关接口"
+    },
+    {
+      "name": "任务",
+      "description": "任务管理相关接口"
+    },
+    {
+      "name": "项目",
+      "description": "项目管理相关接口"
+    },
+    {
+      "name": "标签",
+      "description": "标签管理相关接口"
+    }
+  ],
+  "paths": {
+    "/user/signon": {
+      "post": {
+        "summary": "用户登录",
+        "description": "通过邮箱和密码获取访问令牌",
+        "tags": ["认证"],
+        "operationId": "userLogin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              },
+              "example": {
+                "username": "example@email.com",
+                "password": "yourpassword",
+                "wc": true,
+                "remember": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string",
+                  "example": "t=your-token-value; Path=/; Domain=dida365.com; HttpOnly"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "账号或密码错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "用户邮箱",
+            "format": "email",
+            "example": "example@email.com"
+          },
+          "password": {
+            "type": "string",
+            "description": "用户密码",
+            "format": "password",
+            "example": "yourpassword"
+          },
+          "wc": {
+            "type": "boolean",
+            "description": "是否web端登录",
+            "default": true
+          },
+          "remember": {
+            "type": "boolean",
+            "description": "是否记住登录状态",
+            "default": true
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "12345678"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户邮箱",
+            "example": "example@email.com"
+          },
+          "pro": {
+            "type": "boolean",
+            "description": "是否是专业版用户",
+            "example": false
+          },
+          "timezone": {
+            "type": "string",
+            "description": "用户时区",
+            "example": "Asia/Shanghai"
+          },
+          "timeZoneOffset": {
+            "type": "integer",
+            "description": "时区偏移（毫秒）",
+            "example": 28800000
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "错误代码",
+            "example": "InvalidCredentials"
+          },
+          "message": {
+            "type": "string",
+            "description": "错误信息",
+            "example": "用户名或密码错误"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "t"
+      }
+    }
+  },
+  "security": [
+    {
+      "cookieAuth": []
+    }
+  ]
+} 
