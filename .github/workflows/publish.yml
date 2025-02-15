@@ -1,0 +1,67 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'setup.py'
+      - 'dida/**'
+      - '.github/workflows/publish.yml'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(python setup.py --version)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Check if version exists
+        id: check_version
+        run: |
+          response=$(curl -s https://pypi.org/pypi/didatodolist/json)
+          if echo "$response" | grep -q "\"${{ steps.version.outputs.version }}\""; then
+            echo "Version ${{ steps.version.outputs.version }} already exists on PyPI"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version ${{ steps.version.outputs.version }} does not exist on PyPI"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build package
+        if: steps.check_version.outputs.exists != 'true'
+        run: |
+          python -m build
+      
+      - name: Publish to PyPI
+        if: steps.check_version.outputs.exists != 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m twine upload dist/*
+      
+      - name: Create GitHub Release
+        if: steps.check_version.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
