@@ -19,12 +19,15 @@ pip install didatodolist
 from dida import DidaClient, Task, Project, Tag  # 导入所需的所有类
 ```
 
-### 客户端初始化
+### 客户端初始化和认证
 ```python
-# 使用邮箱密码初始化
+# 方式1：使用邮箱密码初始化
 client = DidaClient(email="your_email@example.com", password="your_password")
+# 获取token（如果你需要保存下来下次使用）
+token = client.token
+print(f"你的token是: {token}")
 
-# 或者使用token初始化
+# 方式2：使用已有token初始化（推荐，避免多次登录）
 client = DidaClient(token="your_token")
 ```
 
