@@ -158,6 +158,14 @@ class TaskAPI(BaseAPI):
             for task in completed_tasks:
                 # 使用 creator + title + createdTime 组合作为键
                 key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
+                # 确保任务状态为已完成
+                task['status'] = 2
+                task['isCompleted'] = True
+                # 确保有completedTime和completedUserId
+                if not task.get('completedTime'):
+                    task['completedTime'] = task.get('modifiedTime')
+                if not task.get('completedUserId'):
+                    task['completedUserId'] = task.get('creator')
                 completed_tasks_info[key] = task
                 
         return completed_tasks_info
@@ -224,10 +232,24 @@ class TaskAPI(BaseAPI):
                 if key in completed_tasks_info:
                     # 获取完整的已完成任务信息并更新
                     completed_task = completed_tasks_info[key]
+                    # 保留原始任务的某些字段
+                    original_fields = {
+                        'id': task.get('id'),
+                        'projectId': task.get('projectId'),
+                        'columnId': task.get('columnId'),
+                        'sortOrder': task.get('sortOrder'),
+                        'tags': task.get('tags', []),
+                        'tagDetails': task.get('tagDetails', [])
+                    }
+                    # 更新任务信息
                     task.update(completed_task)
-                    task['isCompleted'] = True
+                    # 恢复原始字段
+                    task.update(original_fields)
                 else:
+                    # 如果任务不在已完成列表中，确保其状态正确
                     task['isCompleted'] = False
+                    if task.get('status') == 2:
+                        task['status'] = 0
                 
                 # 简化数据结构
                 simplified_task = self._simplify_task_data(task)
