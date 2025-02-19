@@ -142,7 +142,7 @@ class TaskAPI(BaseAPI):
         获取所有已完成任务的信息
         
         Returns:
-            Dict[str, Any]: 包含已完成任务信息的字典，使用 "creator_title_createdTime" 作为键
+            Dict[str, Any]: 包含已完成任务信息的字典，使用 "creator_title" 作为键
         """
         completed_tasks_info = {}
         
@@ -156,9 +156,9 @@ class TaskAPI(BaseAPI):
             
             # 将已完成任务的完整信息存储到字典中
             for task in completed_tasks:
-                # 使用 creator + title + createdTime 组合作为键
-                key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
-                print(f"[Completed Task] creator: {task.get('creator')}, title: {task.get('title')}, createdTime: {task.get('createdTime')}, key: {key}")
+                # 使用 creator + title 组合作为键
+                key = f"{task.get('creator')}_{task.get('title')}"
+                print(f"[Completed Task] creator: {task.get('creator')}, title: {task.get('title')}, key: {key}")
                 # 确保任务状态为已完成
                 task['status'] = 2
                 task['isCompleted'] = True
@@ -184,8 +184,8 @@ class TaskAPI(BaseAPI):
         Returns:
             bool: 是否已完成
         """
-        # 使用 creator + title + createdTime 组合作为键
-        key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
+        # 使用 creator + title 组合作为键
+        key = f"{task.get('creator')}_{task.get('title')}"
         if key in completed_tasks_info:
             # 获取完整的已完成任务信息
             completed_task = completed_tasks_info[key]
@@ -230,9 +230,9 @@ class TaskAPI(BaseAPI):
                 task = self._merge_project_info(task, projects)
                 task = self._merge_tag_info(task, tags)
                 
-                # 使用 creator + title + createdTime 组合来匹配已完成任务
-                key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
-                print(f"[Batch Task] creator: {task.get('creator')}, title: {task.get('title')}, createdTime: {task.get('createdTime')}, key: {key}")
+                # 使用 creator + title 组合来匹配已完成任务
+                key = f"{task.get('creator')}_{task.get('title')}"
+                print(f"[Batch Task] creator: {task.get('creator')}, title: {task.get('title')}, key: {key}")
                 
                 if key in completed_tasks_info:
                     print(f"Found matching completed task for key: {key}")
