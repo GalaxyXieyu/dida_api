@@ -149,7 +149,7 @@ class TaskAPI(BaseAPI):
                     'completedTime': task.get('completedTime'),
                     'completedUserId': task.get('completedUserId')
                 }
-                
+        print(completed_tasks_info)
         return completed_tasks_info
     
     def _is_task_completed(self, task: Dict[str, Any], completed_tasks_info: Dict[str, Any]) -> bool:
@@ -207,9 +207,14 @@ class TaskAPI(BaseAPI):
                 task = self._merge_project_info(task, projects)
                 task = self._merge_tag_info(task, tags)
                 
-                # 判断任务是否完成并更新相关信息
-                is_completed = self._is_task_completed(task, completed_tasks_info)
-                task['isCompleted'] = is_completed
+                # 根据completed_tasks_info更新任务的完成状态
+                task_id = task.get('id')
+                if task_id in completed_tasks_info:
+                    task['isCompleted'] = True
+                    task['completedTime'] = completed_tasks_info[task_id].get('completedTime')
+                    task['completedUserId'] = completed_tasks_info[task_id].get('completedUserId')
+                else:
+                    task['isCompleted'] = False
                 
                 # 简化数据结构
                 simplified_task = self._simplify_task_data(task)
