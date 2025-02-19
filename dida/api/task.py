@@ -97,14 +97,18 @@ class TaskAPI(BaseAPI):
             'startDate': task_data.get('startDate'),
             'dueDate': task_data.get('dueDate'),
             'projectName': task_data.get('projectName'),
+            'projectId': task_data.get('projectId'),
             'projectKind': task_data.get('projectKind'),
+            'columnId': task_data.get('columnId'),
             'tagDetails': task_data.get('tagDetails', []),
             'kind': task_data.get('kind'),
             'isAllDay': task_data.get('isAllDay'),
             'reminder': task_data.get('reminder'),
             'repeatFlag': task_data.get('repeatFlag'),
             'items': task_data.get('items', []),
-            'progress': task_data.get('progress', 0)
+            'progress': task_data.get('progress', 0),
+            'modifiedTime': task_data.get('modifiedTime'),
+            'createdTime': task_data.get('createdTime')
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -119,18 +123,28 @@ class TaskAPI(BaseAPI):
         Returns:
             bool: 是否已完成
         """
-        column_id = task.get('columnId')
-        if not column_id:
-            return False
-            
-        # 如果是已完成栏目
-        if column_id in self._completed_columns:
+        # 1. 首先检查 status 字段
+        if task.get('status') == 2:
             return True
             
-        # 如果有栏目信息，检查栏目名称
-        if column_id in self._column_info:
-            column = self._column_info[column_id]
-            return '已完成' in column.get('name', '')
+        # 2. 检查栏目状态
+        column_id = task.get('columnId')
+        if column_id:
+            # 如果是已完成栏目
+            if column_id in self._completed_columns:
+                return True
+                
+            # 如果有栏目信息，检查栏目名称
+            if column_id in self._column_info:
+                column = self._column_info[column_id]
+                column_name = column.get('name', '')
+                if '已完成' in column_name or '完成' in column_name:
+                    return True
+                    
+        # 3. 检查标题
+        title = task.get('title', '')
+        if title.startswith('✅'):
+            return True
             
         return False
     
@@ -157,6 +171,14 @@ class TaskAPI(BaseAPI):
         
         # 更新栏目信息
         self._update_column_info(projects)
+        
+        # 打印项目和栏目信息用于调试
+        print("项目和栏目信息:")
+        for project in projects:
+            print(f"项目: {project.get('name')} (ID: {project.get('id')})")
+            if 'columns' in project:
+                for column in project['columns']:
+                    print(f"  - 栏目: {column.get('name')} (ID: {column.get('id')})")
         
         # 只处理任务类型
         tasks = [task for task in tasks_data if task.get('kind') == 'TEXT']
