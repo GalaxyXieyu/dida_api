@@ -158,7 +158,6 @@ class TaskAPI(BaseAPI):
             for task in completed_tasks:
                 # 使用 creator + title 组合作为键
                 key = f"{task.get('creator')}_{task.get('title')}"
-                print(f"[Completed Task] creator: {task.get('creator')}, title: {task.get('title')}, key: {key}")
                 # 确保任务状态为已完成
                 task['status'] = 2
                 task['isCompleted'] = True
@@ -168,8 +167,6 @@ class TaskAPI(BaseAPI):
                 if not task.get('completedUserId'):
                     task['completedUserId'] = task.get('creator')
                 completed_tasks_info[key] = task
-                
-            print(f"\nCompleted tasks keys: {list(completed_tasks_info.keys())}\n")
                 
         return completed_tasks_info
     
@@ -231,10 +228,8 @@ class TaskAPI(BaseAPI):
                 
                 # 使用 creator + title 组合来匹配已完成任务
                 key = f"{task.get('creator')}_{task.get('title')}"
-                print(f"[Batch Task] creator: {task.get('creator')}, title: {task.get('title')}, key: {key}")
                 
                 if key in completed_tasks_info:
-                    print(f"Found matching completed task for key: {key}")
                     # 获取完整的已完成任务信息并更新
                     completed_task = completed_tasks_info[key]
                     # 保留原始任务的某些字段
@@ -251,7 +246,6 @@ class TaskAPI(BaseAPI):
                     # 恢复原始字段
                     task.update(original_fields)
                 else:
-                    print(f"No matching completed task found for key: {key}")
                     # 如果任务不在已完成列表中，确保其状态正确
                     task['isCompleted'] = False
                     if task.get('status') == 2:
@@ -555,8 +549,18 @@ class TaskAPI(BaseAPI):
         completed_tasks = []
         
         for task in all_tasks:
-            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S") if task.get('startDate') or task.get('dueDate') else None
-            if task_date and today <= task_date < tomorrow:
+            try:
+                # 尝试第一种格式
+                task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000")
+            except (ValueError, TypeError):
+                try:
+                    # 尝试第二种格式
+                    task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    # 如果两种格式都不匹配，或者没有日期，跳过这个任务
+                    continue
+                    
+            if today <= task_date < tomorrow:
                 if self._is_task_completed(task):
                     if include_completed:
                         completed_tasks.append(task)
