@@ -9,6 +9,26 @@ from ..models.task import Task
 class TaskAPI(BaseAPI):
     """任务和笔记相关的API实现"""
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._completed_columns = set()  # 存储已完成状态的栏目ID
+        self._column_info = {}  # 存储栏目信息
+        
+    def _update_column_info(self, projects: List[Dict[str, Any]]) -> None:
+        """
+        更新栏目信息
+        
+        Args:
+            projects: 项目列表数据
+        """
+        for project in projects:
+            if 'columns' in project:
+                for column in project['columns']:
+                    self._column_info[column['id']] = column
+                    # 根据栏目名称或其他特征判断是否为已完成栏目
+                    if '已完成' in column.get('name', ''):
+                        self._completed_columns.add(column['id'])
+    
     def _merge_project_info(self, task_data: Dict[str, Any], projects: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         合并项目信息到任务数据中
@@ -89,6 +109,31 @@ class TaskAPI(BaseAPI):
         
         return {k: v for k, v in essential_fields.items() if v is not None}
     
+    def _is_task_completed(self, task: Dict[str, Any]) -> bool:
+        """
+        判断任务是否已完成
+        
+        Args:
+            task: 任务数据
+            
+        Returns:
+            bool: 是否已完成
+        """
+        column_id = task.get('columnId')
+        if not column_id:
+            return False
+            
+        # 如果是已完成栏目
+        if column_id in self._completed_columns:
+            return True
+            
+        # 如果有栏目信息，检查栏目名称
+        if column_id in self._column_info:
+            column = self._column_info[column_id]
+            return '已完成' in column.get('name', '')
+            
+        return False
+    
     def get_all_tasks(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         获取所有任务（不包含笔记）
@@ -109,6 +154,9 @@ class TaskAPI(BaseAPI):
         tasks_data = response.get('syncTaskBean', {}).get('update', [])
         projects = response.get('projectProfiles', [])
         tags = response.get('tags', [])
+        
+        # 更新栏目信息
+        self._update_column_info(projects)
         
         # 只处理任务类型
         tasks = [task for task in tasks_data if task.get('kind') == 'TEXT']
@@ -432,6 +480,30 @@ class TaskAPI(BaseAPI):
             tasks = [task for task in tasks if task.get('priority') == priority]
         return self._group_tasks_by_status(tasks)
     
+    def _group_tasks_by_status(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        按状态分组任务
+        
+        Args:
+            tasks: 任务列表
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 分组后的任务
+        """
+        completed_tasks = []
+        uncompleted_tasks = []
+        
+        for task in tasks:
+            if self._is_task_completed(task):
+                completed_tasks.append(task)
+            else:
+                uncompleted_tasks.append(task)
+                
+        return {
+            'completed': completed_tasks,
+            'uncompleted': uncompleted_tasks
+        }
+        
     def get_task_statistics(self) -> Dict[str, Any]:
         """
         获取任务统计信息
@@ -448,8 +520,8 @@ class TaskAPI(BaseAPI):
                 - 本月完成率
         """
         all_tasks = self.get_all_tasks()
-        completed_tasks = [task for task in all_tasks if task.get('status') == 2]
-        uncompleted_tasks = [task for task in all_tasks if task.get('status') != 2]
+        completed_tasks = [task for task in all_tasks if self._is_task_completed(task)]
+        uncompleted_tasks = [task for task in all_tasks if not self._is_task_completed(task)]
         overdue_tasks = self.get_overdue_tasks()
         
         # 按优先级统计
@@ -466,8 +538,8 @@ class TaskAPI(BaseAPI):
         this_month_tasks = self.get_this_month_tasks()
         
         def calculate_completion_rate(tasks):
-            completed = len(tasks.get('已完成', []))
-            total = completed + len(tasks.get('未完成', []))
+            completed = len(tasks.get('completed', []))
+            total = completed + len(tasks.get('uncompleted', []))
             return round(completed / total * 100, 2) if total > 0 else 0
         
         return {
@@ -536,27 +608,4 @@ class TaskAPI(BaseAPI):
             'completed_counts': completed_counts,
             'created_counts': created_counts,
             'completion_rates': completion_rates
-        }
-    
-    def _group_tasks_by_status(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        将任务按完成状态分组
-        
-        Args:
-            tasks: 任务列表
-            
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 分组后的任务
-        """
-        result = {
-            '已完成': [],
-            '未完成': []
-        }
-        
-        for task in tasks:
-            if task.get('status') == 2:
-                result['已完成'].append(task)
-            else:
-                result['未完成'].append(task)
-                
-        return result 
+        } 
