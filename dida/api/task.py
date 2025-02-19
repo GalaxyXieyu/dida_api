@@ -1,7 +1,7 @@
 """
 任务和笔记相关API
 """
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
 from .base import BaseAPI
 from ..models.task import Task
@@ -303,9 +303,152 @@ class TaskAPI(BaseAPI):
             
         return notes
     
-    def create_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_repeat_rule(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        创建新任务
+        处理任务的重复规则，支持中文规则名称
+        
+        Args:
+            task_data: 任务数据
+            
+        Returns:
+            Dict[str, Any]: 处理后的任务数据
+        """
+        if not task_data.get('repeatFlag'):
+            return task_data
+            
+        # 确保有开始时间
+        if not task_data.get('startDate'):
+            task_data['startDate'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+            
+        # 如果没有设置第一次重复时间，使用开始时间
+        if not task_data.get('repeatFirstDate'):
+            task_data['repeatFirstDate'] = task_data.get('startDate')
+            
+        # 处理不同类型的重复规则
+        repeat_flag = task_data['repeatFlag']
+        
+        # 从开始时间获取日期信息
+        start_date = datetime.strptime(task_data['startDate'], "%Y-%m-%dT%H:%M:%S.000+0000")
+        current_day = start_date.day
+        current_month = start_date.month
+        
+        # 中文规则映射
+        if repeat_flag == '每天':
+            task_data.update({
+                'repeatFlag': "RRULE:FREQ=DAILY;INTERVAL=1",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '每周':  # 每周重复，使用开始日期的星期几
+            weekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+            weekday = weekdays[start_date.weekday()]
+            task_data.update({
+                'repeatFlag': f"RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY={weekday}",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '每月':  # 每月重复，使用开始日期的日期
+            task_data.update({
+                'repeatFlag': f"RRULE:FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY={current_day}",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '每年':  # 每年重复，使用开始日期的月份和日期
+            task_data.update({
+                'repeatFlag': f"RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTH={current_month};BYMONTHDAY={current_day}",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '每周工作日' or repeat_flag == 'WEEKDAY':
+            task_data.update({
+                'repeatFlag': "RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '法定工作日' or repeat_flag == 'WORKDAY':
+            task_data.update({
+                'repeatFlag': "RRULE:FREQ=DAILY;INTERVAL=1;TT_SKIP=HOLIDAY,WEEKEND",
+                'repeatFrom': "2"
+            })
+        elif repeat_flag == '艾宾浩斯记忆法' or repeat_flag == 'FORGETTINGCURVE':
+            task_data.update({
+                'repeatFlag': "ERULE:NAME=FORGETTINGCURVE;CYCLE=0",
+                'repeatFrom': "0"
+            })
+        elif repeat_flag.startswith('RRULE:') or repeat_flag.startswith('ERULE:'):
+            # 自定义规则，保持原样
+            if 'repeatFrom' not in task_data:
+                task_data['repeatFrom'] = "2"
+                
+        return task_data
+    
+    def create_task(self, task_data: Dict[str, Any], parent_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        创建新任务，支持子任务创建和艾宾浩斯记忆曲线重复模式
+        
+        Args:
+            task_data: 任务数据
+            parent_id: 父任务ID（如果是子任务）
+            
+        Returns:
+            Dict[str, Any]: 创建成功的任务
+        """
+        # 设置任务类型
+        if 'items' in task_data:
+            task_data['kind'] = 'CHECKLIST'
+        else:
+            task_data['kind'] = 'TEXT'
+            
+        # 处理重复规则
+        task_data = self._process_repeat_rule(task_data)
+                
+        # 创建任务
+        response = self._post("/api/v2/task", task_data)
+        created_task = self._simplify_task_data(response)
+        
+        # 如果是子任务，关联到父任务
+        if parent_id:
+            self.link_subtask(created_task['id'], parent_id, task_data.get('projectId'))
+            
+        return created_task
+    
+    def create_subtask(self, parent_id: str, subtask_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        创建子任务并关联到父任务
+        
+        Args:
+            parent_id: 父任务ID
+            subtask_data: 子任务数据
+            
+        Returns:
+            Dict[str, Any]: 创建成功的子任务
+        """
+        # 获取父任务信息以获取projectId
+        parent_task = self.get_task(parent_id)
+        subtask_data['projectId'] = parent_task['projectId']
+        
+        # 创建子任务
+        return self.create_task(subtask_data, parent_id)
+    
+    def link_subtask(self, task_id: str, parent_id: str, project_id: str) -> bool:
+        """
+        将任务关联为另一个任务的子任务
+        
+        Args:
+            task_id: 子任务ID
+            parent_id: 父任务ID
+            project_id: 项目ID
+            
+        Returns:
+            bool: 是否关联成功
+        """
+        data = [{
+            "taskId": task_id,
+            "projectId": project_id,
+            "parentId": parent_id
+        }]
+        
+        response = self._post("/api/v2/batch/taskParent", data)
+        return bool(response)
+    
+    def create_forgetting_curve_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        创建基于艾宾浩斯记忆曲线的重复任务
         
         Args:
             task_data: 任务数据
@@ -313,9 +456,15 @@ class TaskAPI(BaseAPI):
         Returns:
             Dict[str, Any]: 创建成功的任务
         """
-        task_data['kind'] = 'TEXT'
-        response = self._post("/api/v2/task", task_data)
-        return self._simplify_task_data(response)
+        # 设置艾宾浩斯记忆曲线重复模式
+        task_data.update({
+            'repeatFlag': 'FORGETTINGCURVE',
+            'repeatFrom': "0",
+            'isFloating': False,
+            'timeZone': task_data.get('timeZone', 'Asia/Shanghai')
+        })
+        
+        return self.create_task(task_data)
     
     def create_note(self, note_data: Dict[str, Any]) -> Dict[str, Any]:
         """
