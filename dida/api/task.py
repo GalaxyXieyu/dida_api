@@ -126,24 +126,49 @@ class TaskAPI(BaseAPI):
         
         return {k: v for k, v in essential_fields.items() if v is not None}
     
-    def _is_task_completed(self, task: Dict[str, Any]) -> bool:
+    def _get_completed_tasks_info(self) -> Dict[str, Any]:
+        """
+        获取所有已完成任务的信息
+        
+        Returns:
+            Dict[str, Any]: 包含已完成任务ID和完成时间的字典
+        """
+        completed_tasks_info = {}
+        
+        # 获取所有项目
+        projects = self._get("/api/v2/batch/check/0").get('projectProfiles', [])
+        
+        # 遍历每个项目获取已完成的任务
+        for project in projects:
+            project_id = project['id']
+            completed_tasks = self._get(f"/api/v2/project/{project_id}/completed/")
+            
+            # 将已完成任务的信息存储到字典中
+            for task in completed_tasks:
+                completed_tasks_info[task['id']] = {
+                    'completedTime': task.get('completedTime'),
+                    'completedUserId': task.get('completedUserId')
+                }
+                
+        return completed_tasks_info
+    
+    def _is_task_completed(self, task: Dict[str, Any], completed_tasks_info: Dict[str, Any]) -> bool:
         """
         判断任务是否已完成
         
         Args:
             task: 任务数据
+            completed_tasks_info: 已完成任务信息字典
             
         Returns:
             bool: 是否已完成
         """
-        # 1. 检查完成时间和完成用户ID
-        if task.get('completedTime') and task.get('completedUserId'):
+        task_id = task.get('id')
+        if task_id in completed_tasks_info:
+            # 如果任务ID在已完成任务信息中，则更新任务的完成信息
+            task['completedTime'] = completed_tasks_info[task_id].get('completedTime')
+            task['completedUserId'] = completed_tasks_info[task_id].get('completedUserId')
             return True
-            
-        # 2. 检查状态字段
-        if task.get('status') == 2:
-            return True
-            
         return False
     
     def get_all_tasks(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -162,6 +187,7 @@ class TaskAPI(BaseAPI):
         Returns:
             List[Dict[str, Any]]: 任务列表
         """
+        # 获取batch数据
         response = self._get("/api/v2/batch/check/0")
         tasks_data = response.get('syncTaskBean', {}).get('update', [])
         projects = response.get('projectProfiles', [])
@@ -170,25 +196,23 @@ class TaskAPI(BaseAPI):
         # 更新栏目信息
         self._update_column_info(projects)
         
-        # 打印项目和栏目信息用于调试
-        print("项目和栏目信息:")
-        for project in projects:
-            print(f"项目: {project.get('name')} (ID: {project.get('id')})")
-            if 'columns' in project:
-                for column in project['columns']:
-                    print(f"  - 栏目: {column.get('name')} (ID: {column.get('id')})")
+        # 获取所有已完成任务的信息
+        completed_tasks_info = self._get_completed_tasks_info()
         
         # 只处理任务类型
-        tasks = [task for task in tasks_data if task.get('kind') == 'TEXT']
+        tasks = []
+        for task in tasks_data:
+            if task.get('kind') == 'TEXT':
+                # 合并项目和标签信息
+                task = self._merge_project_info(task, projects)
+                task = self._merge_tag_info(task, tags)
+                
+                # 判断任务是否完成并更新相关信息
+                task['isCompleted'] = self._is_task_completed(task, completed_tasks_info)
+                
+                # 简化数据结构
+                tasks.append(self._simplify_task_data(task))
         
-        # 合并项目和标签信息
-        for task in tasks:
-            task = self._merge_project_info(task, projects)
-            task = self._merge_tag_info(task, tags)
-            
-        # 简化数据结构
-        tasks = [self._simplify_task_data(task) for task in tasks]
-            
         # 应用筛选条件
         if filters:
             filtered_tasks = []
