@@ -108,7 +108,9 @@ class TaskAPI(BaseAPI):
             'items': task_data.get('items', []),
             'progress': task_data.get('progress', 0),
             'modifiedTime': task_data.get('modifiedTime'),
-            'createdTime': task_data.get('createdTime')
+            'createdTime': task_data.get('createdTime'),
+            'completedTime': task_data.get('completedTime'),
+            'completedUserId': task_data.get('completedUserId')
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -123,27 +125,12 @@ class TaskAPI(BaseAPI):
         Returns:
             bool: 是否已完成
         """
-        # 1. 首先检查 status 字段
-        if task.get('status') == 2:
+        # 1. 检查完成时间
+        if task.get('completedTime'):
             return True
             
-        # 2. 检查栏目状态
-        column_id = task.get('columnId')
-        if column_id:
-            # 如果是已完成栏目
-            if column_id in self._completed_columns:
-                return True
-                
-            # 如果有栏目信息，检查栏目名称
-            if column_id in self._column_info:
-                column = self._column_info[column_id]
-                column_name = column.get('name', '')
-                if '已完成' in column_name or '完成' in column_name:
-                    return True
-                    
-        # 3. 检查标题
-        title = task.get('title', '')
-        if title.startswith('✅'):
+        # 2. 检查状态字段
+        if task.get('status') == 2:
             return True
             
         return False
@@ -411,8 +398,31 @@ class TaskAPI(BaseAPI):
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow = today + timedelta(days=1)
         
-        tasks = self.get_tasks_by_date_range(today, tomorrow, include_completed)
-        return self._group_tasks_by_status(tasks)
+        # 获取所有未完成任务
+        uncompleted_tasks = self.get_all_tasks()
+        
+        # 如果需要包含已完成任务，则获取今天完成的任务
+        completed_tasks = []
+        if include_completed:
+            for project in self._get("/api/v2/batch/check/0").get('projectProfiles', []):
+                project_completed = self.get_completed_tasks(
+                    project['id'],
+                    from_time=today.strftime("%Y-%m-%d %H:%M:%S"),
+                    to_time=tomorrow.strftime("%Y-%m-%d %H:%M:%S")
+                )
+                completed_tasks.extend(project_completed)
+        
+        # 过滤今天的任务
+        today_tasks = []
+        for task in uncompleted_tasks:
+            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
+            if task_date and today <= task_date < tomorrow:
+                today_tasks.append(task)
+                
+        return {
+            'completed': completed_tasks,
+            'uncompleted': today_tasks
+        }
     
     def get_this_week_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -429,8 +439,31 @@ class TaskAPI(BaseAPI):
         monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
         next_monday = monday + timedelta(days=7)
         
-        tasks = self.get_tasks_by_date_range(monday, next_monday, include_completed)
-        return self._group_tasks_by_status(tasks)
+        # 获取所有未完成任务
+        uncompleted_tasks = self.get_all_tasks()
+        
+        # 如果需要包含已完成任务，则获取本周完成的任务
+        completed_tasks = []
+        if include_completed:
+            for project in self._get("/api/v2/batch/check/0").get('projectProfiles', []):
+                project_completed = self.get_completed_tasks(
+                    project['id'],
+                    from_time=monday.strftime("%Y-%m-%d %H:%M:%S"),
+                    to_time=next_monday.strftime("%Y-%m-%d %H:%M:%S")
+                )
+                completed_tasks.extend(project_completed)
+        
+        # 过滤本周的任务
+        week_tasks = []
+        for task in uncompleted_tasks:
+            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
+            if task_date and monday <= task_date < next_monday:
+                week_tasks.append(task)
+                
+        return {
+            'completed': completed_tasks,
+            'uncompleted': week_tasks
+        }
     
     def get_this_month_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -449,8 +482,31 @@ class TaskAPI(BaseAPI):
         else:
             next_month = today.replace(month=today.month + 1, day=1)
             
-        tasks = self.get_tasks_by_date_range(first_day, next_month, include_completed)
-        return self._group_tasks_by_status(tasks)
+        # 获取所有未完成任务
+        uncompleted_tasks = self.get_all_tasks()
+        
+        # 如果需要包含已完成任务，则获取本月完成的任务
+        completed_tasks = []
+        if include_completed:
+            for project in self._get("/api/v2/batch/check/0").get('projectProfiles', []):
+                project_completed = self.get_completed_tasks(
+                    project['id'],
+                    from_time=first_day.strftime("%Y-%m-%d %H:%M:%S"),
+                    to_time=next_month.strftime("%Y-%m-%d %H:%M:%S")
+                )
+                completed_tasks.extend(project_completed)
+        
+        # 过滤本月的任务
+        month_tasks = []
+        for task in uncompleted_tasks:
+            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
+            if task_date and first_day <= task_date < next_month:
+                month_tasks.append(task)
+                
+        return {
+            'completed': completed_tasks,
+            'uncompleted': month_tasks
+        }
     
     def get_next_7_days_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -541,12 +597,20 @@ class TaskAPI(BaseAPI):
                 - 本周完成率
                 - 本月完成率
         """
-        all_tasks = self.get_all_tasks()
-        completed_tasks = [task for task in all_tasks if self._is_task_completed(task)]
-        uncompleted_tasks = [task for task in all_tasks if not self._is_task_completed(task)]
+        # 获取所有未完成任务
+        uncompleted_tasks = self.get_all_tasks()
+        
+        # 获取所有已完成任务
+        completed_tasks = []
+        for project in self._get("/api/v2/batch/check/0").get('projectProfiles', []):
+            project_completed = self.get_completed_tasks(project['id'])
+            completed_tasks.extend(project_completed)
+            
+        # 获取过期任务
         overdue_tasks = self.get_overdue_tasks()
         
         # 按优先级统计
+        all_tasks = uncompleted_tasks + completed_tasks
         priority_stats = {
             '最低': len([t for t in all_tasks if t.get('priority') == 0]),
             '低': len([t for t in all_tasks if t.get('priority') == 1]),
@@ -630,4 +694,28 @@ class TaskAPI(BaseAPI):
             'completed_counts': completed_counts,
             'created_counts': created_counts,
             'completion_rates': completion_rates
-        } 
+        }
+    
+    def get_completed_tasks(self, project_id: str, limit: int = 50, from_time: Optional[str] = None, to_time: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取指定项目中已完成的任务
+        
+        Args:
+            project_id: 项目ID
+            limit: 返回的任务数量限制
+            from_time: 开始时间，格式为 "2025-02-19 14:44:46"
+            to_time: 结束时间，格式为 "2025-02-19 14:44:46"
+            
+        Returns:
+            List[Dict[str, Any]]: 已完成的任务列表
+        """
+        params = {'limit': limit}
+        if from_time:
+            params['from'] = from_time
+        if to_time:
+            params['to'] = to_time
+            
+        response = self._get(f"/api/v2/project/{project_id}/completed/", params=params)
+        
+        # 简化数据结构
+        return [self._simplify_task_data(task) for task in response] 
