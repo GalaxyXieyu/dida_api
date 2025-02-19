@@ -1,0 +1,1 @@
+from dida.api import Dida365API; client = Dida365API(); projects = client.projects.get_all_projects(); print("Available projects:"); [print(f"- {p.get(\"name\")} (ID: {p.get(\"id\")})") for p in projects]
