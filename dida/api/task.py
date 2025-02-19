@@ -121,7 +121,7 @@ class TaskAPI(BaseAPI):
             'createdTime': format_date(task_data.get('createdTime')),
             'completedTime': format_date(task_data.get('completedTime')),
             'completedUserId': task_data.get('completedUserId'),
-            'isCompleted': self._is_task_completed(task_data)
+            'isCompleted': task_data.get('isCompleted', False)  # 使用传入的isCompleted值
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -208,10 +208,12 @@ class TaskAPI(BaseAPI):
                 task = self._merge_tag_info(task, tags)
                 
                 # 判断任务是否完成并更新相关信息
-                task['isCompleted'] = self._is_task_completed(task, completed_tasks_info)
+                is_completed = self._is_task_completed(task, completed_tasks_info)
+                task['isCompleted'] = is_completed
                 
                 # 简化数据结构
-                tasks.append(self._simplify_task_data(task))
+                simplified_task = self._simplify_task_data(task)
+                tasks.append(simplified_task)
         
         # 应用筛选条件
         if filters:
