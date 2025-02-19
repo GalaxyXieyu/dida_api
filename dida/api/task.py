@@ -121,7 +121,18 @@ class TaskAPI(BaseAPI):
             'createdTime': format_date(task_data.get('createdTime')),
             'completedTime': format_date(task_data.get('completedTime')),
             'completedUserId': task_data.get('completedUserId'),
-            'isCompleted': task_data.get('isCompleted', False)  # 使用传入的isCompleted值
+            'isCompleted': task_data.get('isCompleted', False),
+            # 添加新的字段
+            'creator': task_data.get('creator'),
+            'timeZone': task_data.get('timeZone', 'Asia/Shanghai'),
+            'isFloating': task_data.get('isFloating', False),
+            'reminders': task_data.get('reminders', []),
+            'exDate': task_data.get('exDate', []),
+            'etag': task_data.get('etag'),
+            'deleted': task_data.get('deleted', 0),
+            'attachments': task_data.get('attachments', []),
+            'imgMode': task_data.get('imgMode', 0),
+            'sortOrder': task_data.get('sortOrder', 0)
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -131,7 +142,7 @@ class TaskAPI(BaseAPI):
         获取所有已完成任务的信息
         
         Returns:
-            Dict[str, Any]: 包含已完成任务ID和完成时间的字典
+            Dict[str, Any]: 包含已完成任务信息的字典，使用 "creator_title_createdTime" 作为键
         """
         completed_tasks_info = {}
         
@@ -143,18 +154,17 @@ class TaskAPI(BaseAPI):
             project_id = project['id']
             completed_tasks = self._get(f"/api/v2/project/{project_id}/completed/")
             
-            # 将已完成任务的信息存储到字典中
+            # 将已完成任务的完整信息存储到字典中
             for task in completed_tasks:
-                completed_tasks_info[task['id']] = {
-                    'completedTime': task.get('completedTime'),
-                    'completedUserId': task.get('completedUserId')
-                }
-        print(completed_tasks_info)
+                # 使用 creator + title + createdTime 组合作为键
+                key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
+                completed_tasks_info[key] = task
+                
         return completed_tasks_info
     
     def _is_task_completed(self, task: Dict[str, Any], completed_tasks_info: Dict[str, Any]) -> bool:
         """
-        判断任务是否已完成
+        判断任务是否已完成，并更新任务信息
         
         Args:
             task: 任务数据
@@ -163,11 +173,13 @@ class TaskAPI(BaseAPI):
         Returns:
             bool: 是否已完成
         """
-        task_id = task.get('id')
-        if task_id in completed_tasks_info:
-            # 如果任务ID在已完成任务信息中，则更新任务的完成信息
-            task['completedTime'] = completed_tasks_info[task_id].get('completedTime')
-            task['completedUserId'] = completed_tasks_info[task_id].get('completedUserId')
+        # 使用 creator + title + createdTime 组合作为键
+        key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
+        if key in completed_tasks_info:
+            # 获取完整的已完成任务信息
+            completed_task = completed_tasks_info[key]
+            # 更新任务的所有相关字段
+            task.update(completed_task)
             return True
         return False
     
@@ -198,7 +210,7 @@ class TaskAPI(BaseAPI):
         
         # 获取所有已完成任务的信息
         completed_tasks_info = self._get_completed_tasks_info()
-        
+            
         # 只处理任务类型
         tasks = []
         for task in tasks_data:
@@ -207,12 +219,13 @@ class TaskAPI(BaseAPI):
                 task = self._merge_project_info(task, projects)
                 task = self._merge_tag_info(task, tags)
                 
-                # 根据completed_tasks_info更新任务的完成状态
-                task_id = task.get('id')
-                if task_id in completed_tasks_info:
+                # 使用 creator + title + createdTime 组合来匹配已完成任务
+                key = f"{task.get('creator')}_{task.get('title')}_{task.get('createdTime')}"
+                if key in completed_tasks_info:
+                    # 获取完整的已完成任务信息并更新
+                    completed_task = completed_tasks_info[key]
+                    task.update(completed_task)
                     task['isCompleted'] = True
-                    task['completedTime'] = completed_tasks_info[task_id].get('completedTime')
-                    task['completedUserId'] = completed_tasks_info[task_id].get('completedUserId')
                 else:
                     task['isCompleted'] = False
                 
