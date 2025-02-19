@@ -600,8 +600,22 @@ class TaskAPI(BaseAPI):
         # 过滤本周的任务
         week_tasks = []
         for task in uncompleted_tasks:
-            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
-            if task_date and monday <= task_date < next_monday:
+            date_str = task.get('startDate', task.get('dueDate'))
+            if not date_str:
+                continue
+                
+            try:
+                # 尝试第一种格式
+                task_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
+            except ValueError:
+                try:
+                    # 尝试第二种格式
+                    task_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # 如果两种格式都不匹配，跳过这个任务
+                    continue
+                    
+            if monday <= task_date < next_monday:
                 week_tasks.append(task)
                 
         return {
@@ -622,9 +636,9 @@ class TaskAPI(BaseAPI):
         today = datetime.now()
         first_day = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if today.month == 12:
-            next_month = today.replace(year=today.year + 1, month=1, day=1)
+            next_first_day = today.replace(year=today.year + 1, month=1, day=1)
         else:
-            next_month = today.replace(month=today.month + 1, day=1)
+            next_first_day = today.replace(month=today.month + 1, day=1)
             
         # 获取所有未完成任务
         uncompleted_tasks = self.get_all_tasks()
@@ -636,15 +650,29 @@ class TaskAPI(BaseAPI):
                 project_completed = self.get_completed_tasks(
                     project['id'],
                     from_time=first_day.strftime("%Y-%m-%d %H:%M:%S"),
-                    to_time=next_month.strftime("%Y-%m-%d %H:%M:%S")
+                    to_time=next_first_day.strftime("%Y-%m-%d %H:%M:%S")
                 )
                 completed_tasks.extend(project_completed)
         
         # 过滤本月的任务
         month_tasks = []
         for task in uncompleted_tasks:
-            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
-            if task_date and first_day <= task_date < next_month:
+            date_str = task.get('startDate', task.get('dueDate'))
+            if not date_str:
+                continue
+                
+            try:
+                # 尝试第一种格式
+                task_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
+            except ValueError:
+                try:
+                    # 尝试第二种格式
+                    task_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # 如果两种格式都不匹配，跳过这个任务
+                    continue
+                    
+            if first_day <= task_date < next_first_day:
                 month_tasks.append(task)
                 
         return {
