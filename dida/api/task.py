@@ -2,6 +2,7 @@
 任务和笔记相关API
 """
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
 from .base import BaseAPI
 from ..models.task import Task
 
@@ -119,7 +120,7 @@ class TaskAPI(BaseAPI):
             
         # 简化数据结构
         tasks = [self._simplify_task_data(task) for task in tasks]
-        
+            
         # 应用筛选条件
         if filters:
             filtered_tasks = []
@@ -303,3 +304,259 @@ class TaskAPI(BaseAPI):
                 if item['dueDate'] > value:
                     return False
         return True 
+    
+    def get_tasks_by_date_range(self, start_date: datetime, end_date: datetime, include_completed: bool = True) -> List[Dict[str, Any]]:
+        """
+        获取指定日期范围内的任务
+        
+        Args:
+            start_date: 开始日期
+            end_date: 结束日期
+            include_completed: 是否包含已完成的任务
+            
+        Returns:
+            List[Dict[str, Any]]: 任务列表
+        """
+        tasks = self.get_all_tasks()
+        filtered_tasks = []
+        
+        for task in tasks:
+            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
+            if task_date and start_date <= task_date <= end_date:
+                if include_completed or task.get('status') != 2:
+                    filtered_tasks.append(task)
+                    
+        return filtered_tasks
+    
+    def get_today_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取今天的任务，按完成状态分组
+        
+        Args:
+            include_completed: 是否包含已完成的任务
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+        
+        tasks = self.get_tasks_by_date_range(today, tomorrow, include_completed)
+        return self._group_tasks_by_status(tasks)
+    
+    def get_this_week_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取本周的任务，按完成状态分组
+        
+        Args:
+            include_completed: 是否包含已完成的任务
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+        """
+        today = datetime.now()
+        monday = today - timedelta(days=today.weekday())
+        monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_monday = monday + timedelta(days=7)
+        
+        tasks = self.get_tasks_by_date_range(monday, next_monday, include_completed)
+        return self._group_tasks_by_status(tasks)
+    
+    def get_this_month_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取本月的任务，按完成状态分组
+        
+        Args:
+            include_completed: 是否包含已完成的任务
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+        """
+        today = datetime.now()
+        first_day = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if today.month == 12:
+            next_month = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            next_month = today.replace(month=today.month + 1, day=1)
+            
+        tasks = self.get_tasks_by_date_range(first_day, next_month, include_completed)
+        return self._group_tasks_by_status(tasks)
+    
+    def get_next_7_days_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取未来7天的任务，按完成状态分组
+        
+        Args:
+            include_completed: 是否包含已完成的任务
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+        """
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        next_week = today + timedelta(days=7)
+        
+        tasks = self.get_tasks_by_date_range(today, next_week, include_completed)
+        return self._group_tasks_by_status(tasks)
+    
+    def get_overdue_tasks(self) -> List[Dict[str, Any]]:
+        """
+        获取所有已过期但未完成的任务
+        
+        Returns:
+            List[Dict[str, Any]]: 过期任务列表
+        """
+        now = datetime.now()
+        tasks = self.get_all_tasks()
+        overdue_tasks = []
+        
+        for task in tasks:
+            if task.get('status') != 2:  # 未完成
+                due_date = datetime.strptime(task.get('dueDate'), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('dueDate') else None
+                if due_date and due_date < now:
+                    overdue_tasks.append(task)
+                    
+        return overdue_tasks
+    
+    def get_tasks_by_priority(self, priority: int = None) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取指定优先级的任务，按完成状态分组
+        
+        Args:
+            priority: 优先级 (0-最低, 1-低, 3-中, 5-高)，None表示获取所有优先级
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+        """
+        tasks = self.get_all_tasks()
+        if priority is not None:
+            tasks = [task for task in tasks if task.get('priority') == priority]
+        return self._group_tasks_by_status(tasks)
+    
+    def get_task_statistics(self) -> Dict[str, Any]:
+        """
+        获取任务统计信息
+        
+        Returns:
+            Dict[str, Any]: 统计信息，包括：
+                - 总任务数
+                - 已完成任务数
+                - 未完成任务数
+                - 过期任务数
+                - 各优先级任务数
+                - 今日完成率
+                - 本周完成率
+                - 本月完成率
+        """
+        all_tasks = self.get_all_tasks()
+        completed_tasks = [task for task in all_tasks if task.get('status') == 2]
+        uncompleted_tasks = [task for task in all_tasks if task.get('status') != 2]
+        overdue_tasks = self.get_overdue_tasks()
+        
+        # 按优先级统计
+        priority_stats = {
+            '最低': len([t for t in all_tasks if t.get('priority') == 0]),
+            '低': len([t for t in all_tasks if t.get('priority') == 1]),
+            '中': len([t for t in all_tasks if t.get('priority') == 3]),
+            '高': len([t for t in all_tasks if t.get('priority') == 5])
+        }
+        
+        # 计算完成率
+        today_tasks = self.get_today_tasks()
+        this_week_tasks = self.get_this_week_tasks()
+        this_month_tasks = self.get_this_month_tasks()
+        
+        def calculate_completion_rate(tasks):
+            completed = len(tasks.get('已完成', []))
+            total = completed + len(tasks.get('未完成', []))
+            return round(completed / total * 100, 2) if total > 0 else 0
+        
+        return {
+            'total_tasks': len(all_tasks),
+            'completed_tasks': len(completed_tasks),
+            'uncompleted_tasks': len(uncompleted_tasks),
+            'overdue_tasks': len(overdue_tasks),
+            'priority_stats': priority_stats,
+            'today_completion_rate': calculate_completion_rate(today_tasks),
+            'week_completion_rate': calculate_completion_rate(this_week_tasks),
+            'month_completion_rate': calculate_completion_rate(this_month_tasks)
+        }
+    
+    def get_task_trends(self, days: int = 30) -> Dict[str, List[Any]]:
+        """
+        获取任务趋势数据
+        
+        Args:
+            days: 统计天数
+            
+        Returns:
+            Dict[str, List[Any]]: 趋势数据，包括：
+                - dates: 日期列表
+                - completed_counts: 每日完成数
+                - created_counts: 每日新建数
+                - completion_rates: 每日完成率
+        """
+        end_date = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+        start_date = (end_date - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        all_tasks = self.get_all_tasks()
+        dates = []
+        completed_counts = []
+        created_counts = []
+        completion_rates = []
+        
+        current_date = start_date
+        while current_date <= end_date:
+            next_date = current_date + timedelta(days=1)
+            
+            # 统计当日完成的任务
+            completed = len([
+                task for task in all_tasks
+                if task.get('status') == 2
+                and datetime.strptime(task.get('modifiedTime'), "%Y-%m-%dT%H:%M:%S.000+0000").date() == current_date.date()
+            ])
+            
+            # 统计当日创建的任务
+            created = len([
+                task for task in all_tasks
+                if datetime.strptime(task.get('createdTime'), "%Y-%m-%dT%H:%M:%S.000+0000").date() == current_date.date()
+            ])
+            
+            # 计算完成率
+            rate = round(completed / created * 100, 2) if created > 0 else 0
+            
+            dates.append(current_date.strftime('%Y-%m-%d'))
+            completed_counts.append(completed)
+            created_counts.append(created)
+            completion_rates.append(rate)
+            
+            current_date = next_date
+            
+        return {
+            'dates': dates,
+            'completed_counts': completed_counts,
+            'created_counts': created_counts,
+            'completion_rates': completion_rates
+        }
+    
+    def _group_tasks_by_status(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        将任务按完成状态分组
+        
+        Args:
+            tasks: 任务列表
+            
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: 分组后的任务
+        """
+        result = {
+            '已完成': [],
+            '未完成': []
+        }
+        
+        for task in tasks:
+            if task.get('status') == 2:
+                result['已完成'].append(task)
+            else:
+                result['未完成'].append(task)
+                
+        return result 

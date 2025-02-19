@@ -16,7 +16,7 @@ pip install didatodolist
 
 ### 导入必要的类
 ```python
-from dida import DidaClient, Task, Project, Tag  # 导入所需的所有类
+from dida import DidaClient  # 导入所需的所有类
 ```
 
 ### 客户端初始化和认证
@@ -34,197 +34,217 @@ client = DidaClient(token="your_token")
 ### 基础使用
 
 ```python
+# 获取所有任务
+tasks = client.tasks.get_all_tasks()
+
+# 获取所有笔记
+notes = client.tasks.get_all_notes()
+
 # 创建任务
-task = client.tasks.create(Task(
-    title="测试任务",
-    content="任务详细内容",
-    priority=3  # 优先级：0-最低，1-低，3-中，5-高
-))
+task = client.tasks.create_task({
+    'title': '测试任务',
+    'content': '任务详细内容',
+    'priority': 3  # 优先级：0-最低，1-低，3-中，5-高
+})
 
-# 创建项目
-project = client.projects.create(Project(
-    name="测试项目",
-    color="#FFD324"  # 项目颜色，使用十六进制颜色代码
-))
+# 创建笔记
+note = client.tasks.create_note({
+    'title': '测试笔记',
+    'content': '笔记内容'
+})
 
-# 创建标签
-tag = client.tags.create(Tag(
-    name="重要",
-    color="#FF0000"  # 标签颜色，使用十六进制颜色代码
-))
+# 更新任务
+task = client.tasks.update_task(task['id'], {
+    'title': '更新后的任务标题',
+    'content': '更新后的内容'
+})
+
+# 更新笔记
+note = client.tasks.update_note(note['id'], {
+    'title': '更新后的笔记标题',
+    'content': '更新后的内容'
+})
+
+# 删除任务或笔记
+client.tasks.delete(item_id, project_id)
+```
+
+### 任务分析和统计功能
+
+#### 1. 按时间范围查询任务
+
+```python
+# 获取今天的任务
+today_tasks = client.tasks.get_today_tasks()
+# 返回格式：{'已完成': [...], '未完成': [...]}
+
+# 获取本周的任务
+week_tasks = client.tasks.get_this_week_tasks()
+
+# 获取本月的任务
+month_tasks = client.tasks.get_this_month_tasks()
+
+# 获取未来7天的任务
+next_7_days_tasks = client.tasks.get_next_7_days_tasks()
+
+# 获取过期任务
+overdue_tasks = client.tasks.get_overdue_tasks()
+```
+
+#### 2. 按优先级查询任务
+
+```python
+# 获取所有高优先级任务
+high_priority_tasks = client.tasks.get_tasks_by_priority(priority=5)
+
+# 获取所有中优先级任务
+medium_priority_tasks = client.tasks.get_tasks_by_priority(priority=3)
+
+# 获取所有低优先级任务
+low_priority_tasks = client.tasks.get_tasks_by_priority(priority=1)
+
+# 获取所有最低优先级任务
+lowest_priority_tasks = client.tasks.get_tasks_by_priority(priority=0)
+```
+
+#### 3. 获取任务统计信息
+
+```python
+# 获取任务统计信息
+stats = client.tasks.get_task_statistics()
+
+# 统计信息包括：
+print(f"总任务数: {stats['total_tasks']}")
+print(f"已完成任务数: {stats['completed_tasks']}")
+print(f"未完成任务数: {stats['uncompleted_tasks']}")
+print(f"过期任务数: {stats['overdue_tasks']}")
+print(f"各优先级任务数: {stats['priority_stats']}")
+print(f"今日完成率: {stats['today_completion_rate']}%")
+print(f"本周完成率: {stats['week_completion_rate']}%")
+print(f"本月完成率: {stats['month_completion_rate']}%")
+```
+
+#### 4. 获取任务趋势数据
+
+```python
+# 获取最近30天的任务趋势
+trends = client.tasks.get_task_trends(days=30)
+
+# 趋势数据包括：
+print("日期列表:", trends['dates'])
+print("每日完成数:", trends['completed_counts'])
+print("每日新建数:", trends['created_counts'])
+print("每日完成率:", trends['completion_rates'])
+
+# 可以用这些数据绘制趋势图，例如使用matplotlib：
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(12, 6))
+plt.plot(trends['dates'], trends['completion_rates'], marker='o')
+plt.title('任务完成率趋势')
+plt.xlabel('日期')
+plt.ylabel('完成率(%)')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
 ```
 
 ## 详细文档
 
-### Task 类参数说明
-- title: 任务标题（必填）
-- content: 任务内容（选填）
-- priority: 优先级（选填）
-  - 0: 最低
-  - 1: 低
-  - 3: 中
-  - 5: 高
-- status: 任务状态（选填）
-  - 0: 未完成
-  - 2: 已完成
-- start_date: 开始时间（选填）
-- due_date: 截止时间（选填）
-- project_id: 所属项目ID（选填）
-- tags: 标签列表（选填）
-- sort_order: 排序顺序（选填）
-- time_zone: 时区（选填，默认"Asia/Shanghai"）
-- is_floating: 是否浮动（选填）
-- is_all_day: 是否全天（选填）
-- reminder: 提醒（选填）
-- reminders: 提醒列表（选填）
-- repeat_flag: 重复标记（选填）
-- ex_date: 排除日期（选填）
-- items: 子项目（选填）
-- progress: 进度（选填，0-100）
-- modified_time: 修改时间（选填）
-- created_time: 创建时间（选填）
-- creator: 创建者ID（选填）
-- attachments: 附件列表（选填）
-- column_id: 列ID（选填）
-- kind: 类型（选填，默认"TEXT"）
-- img_mode: 图片模式（选填）
+### 任务和笔记的数据结构
+```python
+{
+    'id': '任务或笔记ID',
+    'title': '标题',
+    'content': '内容',
+    'priority': 优先级(0-5),
+    'status': 状态(0-未完成, 2-已完成),
+    'startDate': '开始时间',
+    'dueDate': '截止时间',
+    'projectName': '所属项目名称',
+    'projectKind': '项目类型(TASK/NOTE)',
+    'tagDetails': [  # 标签详情
+        {
+            'name': '标签名称',
+            'label': '标签显示名称'
+        }
+    ],
+    'kind': '类型(TEXT/NOTE)',
+    'isAllDay': '是否全天',
+    'reminder': '提醒设置',
+    'repeatFlag': '重复设置',
+    'items': '子项目列表',
+    'progress': '进度(0-100)'
+}
+```
 
-### Project 类参数说明
-- name: 项目名称（必填）
-- color: 项目颜色（选填，十六进制颜色代码）
+### 筛选条件说明
+获取任务或笔记时可以使用以下筛选条件：
+```python
+filters = {
+    'status': 0,  # 任务状态 (0-未完成, 2-已完成)
+    'priority': 3,  # 优先级 (0-5)
+    'project_id': 'xxx',  # 项目ID
+    'tag_names': ['标签1', '标签2'],  # 标签名称列表
+    'start_date': '2024-02-19T00:00:00.000+0000',  # 开始时间
+    'due_date': '2024-02-20T00:00:00.000+0000'  # 截止时间
+}
 
-### Tag 类参数说明
-- name: 标签名称（必填）
-- color: 标签颜色（选填，十六进制颜色代码）
+# 使用筛选条件获取任务
+tasks = client.tasks.get_all_tasks(filters)
+
+# 使用筛选条件获取笔记
+notes = client.tasks.get_all_notes(filters)
+```
+
+## 版本历史
+
+### 0.1.4 (2024-02-19)
+- 分离任务和笔记的API操作
+- 简化数据结构，只保留必要字段
+- 合并项目和标签信息到返回数据中
+- 优化筛选功能
+- 改进API文档和使用示例
+- 添加任务分析和统计功能
+  - 按时间范围查询任务（今天/本周/本月/未来7天）
+  - 按优先级查询任务
+  - 获取任务统计信息
+  - 获取任务趋势数据
+
+### 0.1.3 (2024-02-18)
+- 添加更多任务字段支持
+- 完善文档说明
+- 添加Python 3.11支持
+
+### 0.1.2 (2024-02-15)
+- 初始版本发布
+- 基本的任务、项目、标签管理功能
 
 ## 注意事项
 
-1. 所有的创建操作都需要先实例化对应的模型类（Task、Project、Tag），然后通过client的对应方法创建
-2. 颜色值使用标准的十六进制颜色代码（如 "#FF0000" 表示红色）
-3. 时间相关的字段支持多种格式，推荐使用 ISO 8601 格式（如 "2024-03-15T10:00:00.000+0000"）
+1. 任务和笔记的区别：
+   - 任务(TEXT)：支持完成状态、优先级、提醒等功能
+   - 笔记(NOTE)：主要用于记录信息，不支持完成状态和提醒
 
-## 项目结构
-```
-dida/
-├── api/                    # API实现目录
-│   ├── __init__.py        # API模块初始化
-│   ├── base.py            # API基类
-│   ├── task.py            # 任务相关API
-│   ├── project.py         # 项目相关API
-│   └── tag.py             # 标签相关API
-├── docs/                   # 文档目录
-│   ├── api/               # API文档
-│   │   ├── README.md      # API总体说明
-│   │   └── ...           # 各API详细文档
-│   └── models/            # 数据模型文档
-├── examples/              # 示例代码目录
-│   ├── basic/            # 基础示例
-│   │   └── basic_usage.py # 基础用法示例
-│   └── advanced/         # 高级示例
-│       ├── task_analytics.py  # 任务分析示例
-│       └── advanced_usage.py  # 高级用法示例
-├── models/               # 数据模型目录
-│   ├── __init__.py      # 模型模块初始化
-│   ├── base.py          # 模型基类
-│   ├── task.py          # 任务模型
-│   ├── project.py       # 项目模型
-│   └── tag.py           # 标签模型
-├── utils/               # 工具类目录
-│   ├── __init__.py      # 工具模块初始化
-│   ├── http.py          # HTTP客户端
-│   └── auth.py          # 认证相关工具
-├── __init__.py          # 包初始化文件
-├── client.py            # 主客户端类
-└── exceptions.py        # 异常定义
-```
+2. 数据结构已经过优化：
+   - 移除了不必要的字段（如排序、ID等）
+   - 添加了更有意义的字段（如项目名称、标签详情等）
+   - 保持数据结构的简洁性和可读性
 
-## 模块说明
+3. API调用建议：
+   - 使用token方式认证，避免频繁登录
+   - 合理使用筛选条件，减少数据传输
+   - 注意API调用频率限制
 
-### 1. API模块 (`api/`)
-- `base.py`: 定义API基类，包含通用的HTTP请求方法
-- `task.py`: 实现任务相关的API调用
-- `project.py`: 实现项目相关的API调用
-- `tag.py`: 实现标签相关的API调用
-
-### 2. 数据模型 (`models/`)
-- `base.py`: 定义模型基类，包含通用的序列化方法
-- `task.py`: 任务数据模型，定义任务的属性和方法
-- `project.py`: 项目数据模型，定义项目的属性和方法
-- `tag.py`: 标签数据模型，定义标签的属性和方法
-
-### 3. 工具类 (`utils/`)
-- `http.py`: HTTP客户端实现，处理API请求
-- `auth.py`: 认证相关功能，包括token管理
-
-### 4. 示例代码 (`examples/`)
-- `basic/`: 基础使用示例
-  - `basic_usage.py`: 展示基本的API使用方法
-- `advanced/`: 高级使用示例
-  - `task_analytics.py`: 任务数据分析示例
-  - `advanced_usage.py`: 展示高级功能使用
-
-### 5. 文档 (`docs/`)
-- `api/`: API相关文档
-  - `README.md`: API总体说明，包含所有字段定义
-- `models/`: 数据模型文档，详细说明每个字段的含义和用法
-
-## API功能说明
-
-### 1. 任务管理
-- 创建、更新、删除任务
-- 获取任务列表
-- 任务状态管理
-- 子任务管理
-- 任务标签管理
-- 任务提醒设置
-- 重复任务设置
-
-### 2. 项目管理
-- 创建、更新、删除项目
-- 获取项目列表
-- 项目任务管理
-- 项目权限管理
-- 项目视图设置
-
-### 3. 标签管理
-- 创建、更新、删除标签
-- 获取标签列表
-- 标签重命名
-- 标签合并
-- 标签任务管理
-
-## 注意事项
-
-### 1. 认证
-- 支持邮箱密码和token两种认证方式
-- token建议妥善保存，避免泄露
-- 建议使用环境变量存储敏感信息
-
-### 2. 错误处理
-- 所有API调用都有适当的错误处理
-- 使用自定义异常类进行错误分类
-- 详细的错误信息便于调试
-
-### 3. 数据类型
-- 所有时间字段使用ISO 8601格式的UTC时间
-- 优先级范围是1-5，值越大优先级越高
-- 任务状态：0（未完成）和2（已完成）
-
-### 4. 性能考虑
-- 支持批量操作以提高效率
-- 建议合理使用筛选条件减少数据传输
-- 注意API调用频率限制
-
-## 贡献指南
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
+4. 任务分析和统计功能使用建议：
+   - 定期查看任务统计信息，了解整体任务完成情况
+   - 使用趋势数据分析工作效率变化
+   - 及时处理过期任务
+   - 合理安排高优先级任务
 
 ## 许可证
 MIT License
 
 ## 联系方式
 - 作者：xieyu
-- 邮箱：your_email 
+- 邮箱：523018705@qq.com 
