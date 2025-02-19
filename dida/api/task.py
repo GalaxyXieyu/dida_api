@@ -136,8 +136,8 @@ class TaskAPI(BaseAPI):
         Returns:
             bool: 是否已完成
         """
-        # 1. 检查完成时间
-        if task.get('completedTime'):
+        # 1. 检查完成时间和完成用户ID
+        if task.get('completedTime') and task.get('completedUserId'):
             return True
             
         # 2. 检查状态字段
@@ -478,7 +478,13 @@ class TaskAPI(BaseAPI):
         tomorrow = today + timedelta(days=1)
         
         # 获取所有未完成任务
-        uncompleted_tasks = self.get_all_tasks()
+        uncompleted_tasks = []
+        all_tasks = self.get_all_tasks()
+        for task in all_tasks:
+            if not self._is_task_completed(task):
+                task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S") if task.get('startDate') or task.get('dueDate') else None
+                if task_date and today <= task_date < tomorrow:
+                    uncompleted_tasks.append(task)
         
         # 如果需要包含已完成任务，则获取今天完成的任务
         completed_tasks = []
@@ -490,17 +496,10 @@ class TaskAPI(BaseAPI):
                     to_time=tomorrow.strftime("%Y-%m-%d %H:%M:%S")
                 )
                 completed_tasks.extend(project_completed)
-        
-        # 过滤今天的任务
-        today_tasks = []
-        for task in uncompleted_tasks:
-            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
-            if task_date and today <= task_date < tomorrow:
-                today_tasks.append(task)
                 
         return {
             'completed': completed_tasks,
-            'uncompleted': today_tasks
+            'uncompleted': uncompleted_tasks
         }
     
     def get_this_week_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
