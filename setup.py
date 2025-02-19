@@ -5,13 +5,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="didatodolist",
-    version="0.1.2",
+    version="0.1.3",
     author="xieyu",
     author_email="523018705@qq.com",
     description="滴答清单(TickTick/Dida365) Python SDK",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/dida365-python-sdk",
+    url="https://github.com/xieyu567/dida",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -23,6 +23,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     python_requires=">=3.7",

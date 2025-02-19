@@ -64,10 +64,30 @@ tag = client.tags.create(Tag(
   - 1: 低
   - 3: 中
   - 5: 高
+- status: 任务状态（选填）
+  - 0: 未完成
+  - 2: 已完成
 - start_date: 开始时间（选填）
 - due_date: 截止时间（选填）
 - project_id: 所属项目ID（选填）
 - tags: 标签列表（选填）
+- sort_order: 排序顺序（选填）
+- time_zone: 时区（选填，默认"Asia/Shanghai"）
+- is_floating: 是否浮动（选填）
+- is_all_day: 是否全天（选填）
+- reminder: 提醒（选填）
+- reminders: 提醒列表（选填）
+- repeat_flag: 重复标记（选填）
+- ex_date: 排除日期（选填）
+- items: 子项目（选填）
+- progress: 进度（选填，0-100）
+- modified_time: 修改时间（选填）
+- created_time: 创建时间（选填）
+- creator: 创建者ID（选填）
+- attachments: 附件列表（选填）
+- column_id: 列ID（选填）
+- kind: 类型（选填，默认"TEXT"）
+- img_mode: 图片模式（选填）
 
 ### Project 类参数说明
 - name: 项目名称（必填）
