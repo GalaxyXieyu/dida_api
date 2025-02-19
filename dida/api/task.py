@@ -88,14 +88,24 @@ class TaskAPI(BaseAPI):
         Returns:
             Dict[str, Any]: 简化后的任务数据
         """
+        # 处理日期格式
+        def format_date(date_str: Optional[str]) -> Optional[str]:
+            if not date_str:
+                return None
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                return date_str
+
         essential_fields = {
             'id': task_data.get('id'),
             'title': task_data.get('title'),
             'content': task_data.get('content'),
             'priority': task_data.get('priority'),
             'status': task_data.get('status'),
-            'startDate': task_data.get('startDate'),
-            'dueDate': task_data.get('dueDate'),
+            'startDate': format_date(task_data.get('startDate')),
+            'dueDate': format_date(task_data.get('dueDate')),
             'projectName': task_data.get('projectName'),
             'projectId': task_data.get('projectId'),
             'projectKind': task_data.get('projectKind'),
@@ -107,10 +117,11 @@ class TaskAPI(BaseAPI):
             'repeatFlag': task_data.get('repeatFlag'),
             'items': task_data.get('items', []),
             'progress': task_data.get('progress', 0),
-            'modifiedTime': task_data.get('modifiedTime'),
-            'createdTime': task_data.get('createdTime'),
-            'completedTime': task_data.get('completedTime'),
-            'completedUserId': task_data.get('completedUserId')
+            'modifiedTime': format_date(task_data.get('modifiedTime')),
+            'createdTime': format_date(task_data.get('createdTime')),
+            'completedTime': format_date(task_data.get('completedTime')),
+            'completedUserId': task_data.get('completedUserId'),
+            'isCompleted': self._is_task_completed(task_data)
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -344,23 +355,91 @@ class TaskAPI(BaseAPI):
             bool: 是否匹配筛选条件
         """
         for key, value in filters.items():
+            # 基础筛选
             if key == 'status' and item.get('status') != value:
                 return False
             elif key == 'priority' and item.get('priority') != value:
                 return False
             elif key == 'project_id' and item.get('projectId') != value:
                 return False
+            elif key == 'project_name' and value.lower() not in item.get('projectName', '').lower():
+                return False
+            elif key == 'column_id' and item.get('columnId') != value:
+                return False
+            
+            # 标签筛选
             elif key == 'tag_names':
-                item_tags = {tag['name'] for tag in item.get('tagDetails', [])}
-                if not (item_tags & set(value)):  # 如果没有交集
+                if isinstance(value, str):  # 如果是单个标签
+                    value = [value]
+                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
+                # 检查是否包含任意一个标签（OR关系）
+                if not any(tag.lower() in item_tags for tag in value):
                     return False
+            elif key == 'tag_names_all':  # 必须包含所有指定标签（AND关系）
+                if isinstance(value, str):
+                    value = [value]
+                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
+                # 检查是否包含所有标签
+                if not all(tag.lower() in item_tags for tag in value):
+                    return False
+            
+            # 日期筛选
             elif key == 'start_date' and item.get('startDate'):
-                if item['startDate'] < value:
+                if datetime.strptime(item['startDate'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
                     return False
             elif key == 'due_date' and item.get('dueDate'):
-                if item['dueDate'] > value:
+                if datetime.strptime(item['dueDate'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
                     return False
-        return True 
+            elif key == 'has_due_date' and bool(item.get('dueDate')) != value:
+                return False
+            elif key == 'has_start_date' and bool(item.get('startDate')) != value:
+                return False
+            
+            # 完成状态筛选
+            elif key == 'is_completed' and item.get('isCompleted') != value:
+                return False
+            
+            # 进度筛选
+            elif key == 'min_progress' and item.get('progress', 0) < value:
+                return False
+            elif key == 'max_progress' and item.get('progress', 0) > value:
+                return False
+            
+            # 模糊搜索
+            elif key == 'keyword':
+                keyword = str(value).lower()
+                title = item.get('title', '').lower()
+                content = item.get('content', '').lower()
+                project_name = item.get('projectName', '').lower()
+                tags = ' '.join(tag['name'].lower() for tag in item.get('tagDetails', []))
+                if keyword not in title and keyword not in content and keyword not in project_name and keyword not in tags:
+                    return False
+            
+            # 创建时间筛选
+            elif key == 'created_after' and item.get('createdTime'):
+                if datetime.strptime(item['createdTime'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
+                    return False
+            elif key == 'created_before' and item.get('createdTime'):
+                if datetime.strptime(item['createdTime'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
+                    return False
+            
+            # 修改时间筛选
+            elif key == 'modified_after' and item.get('modifiedTime'):
+                if datetime.strptime(item['modifiedTime'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
+                    return False
+            elif key == 'modified_before' and item.get('modifiedTime'):
+                if datetime.strptime(item['modifiedTime'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
+                    return False
+            
+            # 子任务筛选
+            elif key == 'has_items' and bool(item.get('items')) != value:
+                return False
+            elif key == 'min_items' and len(item.get('items', [])) < value:
+                return False
+            elif key == 'max_items' and len(item.get('items', [])) > value:
+                return False
+            
+        return True
     
     def get_tasks_by_date_range(self, start_date: datetime, end_date: datetime, include_completed: bool = True) -> List[Dict[str, Any]]:
         """

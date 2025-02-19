@@ -159,9 +159,10 @@ plt.show()
     'content': '内容',
     'priority': 优先级(0-5),
     'status': 状态(0-未完成, 2-已完成),
-    'startDate': '开始时间',
-    'dueDate': '截止时间',
+    'startDate': '开始时间 (YYYY-MM-DD HH:MM:SS)',
+    'dueDate': '截止时间 (YYYY-MM-DD HH:MM:SS)',
     'projectName': '所属项目名称',
+    'projectId': '项目ID',
     'projectKind': '项目类型(TASK/NOTE)',
     'tagDetails': [  # 标签详情
         {
@@ -174,7 +175,12 @@ plt.show()
     'reminder': '提醒设置',
     'repeatFlag': '重复设置',
     'items': '子项目列表',
-    'progress': '进度(0-100)'
+    'progress': '进度(0-100)',
+    'modifiedTime': '修改时间 (YYYY-MM-DD HH:MM:SS)',
+    'createdTime': '创建时间 (YYYY-MM-DD HH:MM:SS)',
+    'completedTime': '完成时间 (YYYY-MM-DD HH:MM:SS)',
+    'completedUserId': '完成用户ID',
+    'isCompleted': '是否已完成(true/false)'
 }
 ```
 
@@ -182,19 +188,151 @@ plt.show()
 获取任务或笔记时可以使用以下筛选条件：
 ```python
 filters = {
+    # 基础筛选
     'status': 0,  # 任务状态 (0-未完成, 2-已完成)
-    'priority': 3,  # 优先级 (0-5)
+    'priority': 3,  # 优先级 (0-最低, 1-低, 3-中, 5-高)
     'project_id': 'xxx',  # 项目ID
-    'tag_names': ['标签1', '标签2'],  # 标签名称列表
-    'start_date': '2024-02-19T00:00:00.000+0000',  # 开始时间
-    'due_date': '2024-02-20T00:00:00.000+0000'  # 截止时间
+    'project_name': '工作',  # 项目名称（支持模糊匹配）
+    'column_id': 'xxx',  # 看板列ID
+    
+    # 标签筛选
+    'tag_names': ['工作', '重要'],  # 包含任意一个标签即可（OR关系）
+    'tag_names_all': ['工作', '重要'],  # 必须包含所有标签（AND关系）
+    
+    # 日期筛选
+    'start_date': '2024-02-19 00:00:00',  # 开始时间
+    'due_date': '2024-02-20 00:00:00',  # 截止时间
+    'has_due_date': True,  # 是否有截止时间
+    'has_start_date': True,  # 是否有开始时间
+    
+    # 完成状态筛选
+    'is_completed': True,  # 是否已完成
+    
+    # 进度筛选
+    'min_progress': 50,  # 最小进度
+    'max_progress': 100,  # 最大进度
+    
+    # 模糊搜索
+    'keyword': '会议',  # 关键词（会搜索标题、内容、项目名称和标签）
+    
+    # 创建时间筛选
+    'created_after': '2024-02-19 00:00:00',  # 在此时间后创建
+    'created_before': '2024-02-20 00:00:00',  # 在此时间前创建
+    
+    # 修改时间筛选
+    'modified_after': '2024-02-19 00:00:00',  # 在此时间后修改
+    'modified_before': '2024-02-20 00:00:00',  # 在此时间前修改
+    
+    # 子任务筛选
+    'has_items': True,  # 是否有子任务
+    'min_items': 1,  # 最少子任务数
+    'max_items': 5  # 最多子任务数
 }
 
 # 使用筛选条件获取任务
 tasks = client.tasks.get_all_tasks(filters)
+```
 
-# 使用筛选条件获取笔记
-notes = client.tasks.get_all_notes(filters)
+### 筛选示例
+
+1. 标签筛选示例：
+```python
+# 搜索包含"工作"或"重要"任意一个标签的任务
+tasks = client.tasks.get_all_tasks({
+    'tag_names': ['工作', '重要']
+})
+
+# 搜索同时包含"工作"和"重要"两个标签的任务
+tasks = client.tasks.get_all_tasks({
+    'tag_names_all': ['工作', '重要']
+})
+
+# 也支持单个标签筛选
+tasks = client.tasks.get_all_tasks({
+    'tag_names': '工作'  # 或 'tag_names_all': '工作'
+})
+
+# 标签筛选可以和其他条件组合
+tasks = client.tasks.get_all_tasks({
+    'tag_names': ['工作', '重要'],
+    'is_completed': False,
+    'priority': 5
+})
+```
+
+2. 按优先级和状态筛选：
+```python
+# 获取所有高优先级且未完成的任务
+tasks = client.tasks.get_all_tasks({
+    'priority': 5,
+    'is_completed': False
+})
+
+# 获取所有已完成的中优先级任务
+tasks = client.tasks.get_all_tasks({
+    'priority': 3,
+    'is_completed': True
+})
+```
+
+3. 按日期范围筛选：
+```python
+# 获取特定日期范围内的任务
+tasks = client.tasks.get_all_tasks({
+    'created_after': '2024-02-19 00:00:00',
+    'created_before': '2024-02-20 00:00:00'
+})
+
+# 获取最近修改的任务
+tasks = client.tasks.get_all_tasks({
+    'modified_after': '2024-02-19 00:00:00'
+})
+```
+
+4. 按进度筛选：
+```python
+# 获取进度超过50%的任务
+tasks = client.tasks.get_all_tasks({
+    'min_progress': 50
+})
+
+# 获取进度在30%-70%之间的任务
+tasks = client.tasks.get_all_tasks({
+    'min_progress': 30,
+    'max_progress': 70
+})
+```
+
+5. 复合条件筛选：
+```python
+# 获取工作项目中的高优先级、有截止日期且未完成的任务
+tasks = client.tasks.get_all_tasks({
+    'project_name': '工作',
+    'priority': 5,
+    'has_due_date': True,
+    'is_completed': False
+})
+
+# 获取包含特定标签且有子任务的任务
+tasks = client.tasks.get_all_tasks({
+    'tag_names': ['重要', '工作'],
+    'has_items': True
+})
+```
+
+6. 看板相关筛选：
+```python
+# 获取特定看板列的任务
+tasks = client.tasks.get_all_tasks({
+    'column_id': 'xxx'
+})
+
+# 获取特定项目中未完成的看板任务
+tasks = client.tasks.get_all_tasks({
+    'project_id': 'xxx',
+    'column_id': 'xxx',
+    'is_completed': False
+})
 ```
 
 ## 版本历史
