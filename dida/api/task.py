@@ -173,25 +173,24 @@ class TaskAPI(BaseAPI):
                 
         return completed_tasks_info
     
-    def _is_task_completed(self, task: Dict[str, Any], completed_tasks_info: Dict[str, Any]) -> bool:
+    def _is_task_completed(self, task: Dict[str, Any]) -> bool:
         """
-        判断任务是否已完成，并更新任务信息
+        判断任务是否已完成
         
         Args:
             task: 任务数据
-            completed_tasks_info: 已完成任务信息字典
             
         Returns:
             bool: 是否已完成
         """
-        # 使用 creator + title 组合作为键
-        key = f"{task.get('creator')}_{task.get('title')}"
-        if key in completed_tasks_info:
-            # 获取完整的已完成任务信息
-            completed_task = completed_tasks_info[key]
-            # 更新任务的所有相关字段
-            task.update(completed_task)
+        # 检查任务状态
+        if task.get('status') == 2 or task.get('isCompleted', False):
             return True
+        
+        # 检查是否在已完成栏目中
+        if task.get('columnId') in self._completed_columns:
+            return True
+        
         return False
     
     def get_all_tasks(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -550,25 +549,19 @@ class TaskAPI(BaseAPI):
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow = today + timedelta(days=1)
         
-        # 获取所有未完成任务
-        uncompleted_tasks = []
+        # 获取所有任务
         all_tasks = self.get_all_tasks()
-        for task in all_tasks:
-            if not self._is_task_completed(task):
-                task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S") if task.get('startDate') or task.get('dueDate') else None
-                if task_date and today <= task_date < tomorrow:
-                    uncompleted_tasks.append(task)
-        
-        # 如果需要包含已完成任务，则获取今天完成的任务
+        uncompleted_tasks = []
         completed_tasks = []
-        if include_completed:
-            for project in self._get("/api/v2/batch/check/0").get('projectProfiles', []):
-                project_completed = self.get_completed_tasks(
-                    project['id'],
-                    from_time=today.strftime("%Y-%m-%d %H:%M:%S"),
-                    to_time=tomorrow.strftime("%Y-%m-%d %H:%M:%S")
-                )
-                completed_tasks.extend(project_completed)
+        
+        for task in all_tasks:
+            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S") if task.get('startDate') or task.get('dueDate') else None
+            if task_date and today <= task_date < tomorrow:
+                if self._is_task_completed(task):
+                    if include_completed:
+                        completed_tasks.append(task)
+                else:
+                    uncompleted_tasks.append(task)
                 
         return {
             'completed': completed_tasks,
@@ -847,12 +840,12 @@ class TaskAPI(BaseAPI):
             'completion_rates': completion_rates
         }
     
-    def get_completed_tasks(self, project_id: str, limit: int = 50, from_time: Optional[str] = None, to_time: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_completed_tasks(self, project_id: Optional[str] = None, limit: int = 50, from_time: Optional[str] = None, to_time: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        获取指定项目中已完成的任务
+        获取已完成的任务。如果不指定project_id，则获取所有项目的已完成任务
         
         Args:
-            project_id: 项目ID
+            project_id: 项目ID（可选）。如果不指定，则获取所有项目的已完成任务
             limit: 返回的任务数量限制
             from_time: 开始时间，格式为 "2025-02-19 14:44:46"
             to_time: 结束时间，格式为 "2025-02-19 14:44:46"
@@ -860,13 +853,25 @@ class TaskAPI(BaseAPI):
         Returns:
             List[Dict[str, Any]]: 已完成的任务列表
         """
-        params = {'limit': limit}
-        if from_time:
-            params['from'] = from_time
-        if to_time:
-            params['to'] = to_time
+        completed_tasks = []
+        
+        # 如果没有指定project_id，获取所有项目
+        if project_id is None:
+            projects = self._get("/api/v2/batch/check/0").get('projectProfiles', [])
+            project_ids = [p['id'] for p in projects]
+        else:
+            project_ids = [project_id]
+        
+        # 遍历所有项目获取已完成任务
+        for pid in project_ids:
+            params = {'limit': limit}
+            if from_time:
+                params['from'] = from_time
+            if to_time:
+                params['to'] = to_time
             
-        response = self._get(f"/api/v2/project/{project_id}/completed/", params=params)
+            response = self._get(f"/api/v2/project/{pid}/completed/", params=params)
+            completed_tasks.extend(response)
         
         # 简化数据结构
-        return [self._simplify_task_data(task) for task in response] 
+        return [self._simplify_task_data(task) for task in completed_tasks] 
