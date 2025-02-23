@@ -116,18 +116,23 @@ class Task(BaseModel):
             return None
             
         try:
+            # 设置默认时区为北京时间
+            local_tz = pytz.timezone('Asia/Shanghai')
+            
             # 如果是ISO格式带时区的时间
             if 'T' in date_str and ('+' in date_str or 'Z' in date_str):
-                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                # 将Z替换为+00:00以便解析
+                clean_date_str = date_str.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(clean_date_str)
+                # 如果时间没有时区信息，假定为UTC时间
                 if dt.tzinfo is None:
                     dt = pytz.UTC.localize(dt)
             else:
-                # 如果是普通格式的时间字符串，假设是UTC时间
+                # 如果是普通格式的时间字符串，直接作为北京时间处理
                 dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                dt = pytz.UTC.localize(dt)
+                dt = local_tz.localize(dt)
             
-            # 转换到目标时区
-            local_tz = pytz.timezone(self.time_zone)
+            # 确保返回北京时间
             return dt.astimezone(local_tz)
         except Exception as e:
             print(f"Warning: Failed to parse datetime {date_str}: {e}")
@@ -190,7 +195,7 @@ class Task(BaseModel):
             'priority': self.priority,
             'status': self.status,
             'sortOrder': self.sort_order,
-            'timeZone': self.time_zone,
+            'timeZone': 'Asia/Shanghai',  # 固定使用北京时区
             'isFloating': self.is_floating,
             'isAllDay': self.is_all_day,
             'reminder': self.reminder,
@@ -203,7 +208,7 @@ class Task(BaseModel):
             'imgMode': self.img_mode
         }
         
-        # 转换时间为UTC时区
+        # 转换时间为UTC时区（用于API请求）
         if self.start_date:
             utc_start = self.start_date.astimezone(pytz.UTC)
             data['startDate'] = utc_start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -212,14 +217,18 @@ class Task(BaseModel):
             utc_due = self.due_date.astimezone(pytz.UTC)
             data['dueDate'] = utc_due.strftime("%Y-%m-%dT%H:%M:%S.000Z")
             
+        if self.modified_time:
+            utc_modified = self.modified_time.astimezone(pytz.UTC)
+            data['modifiedTime'] = utc_modified.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            
+        if self.created_time:
+            utc_created = self.created_time.astimezone(pytz.UTC)
+            data['createdTime'] = utc_created.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            
         if self.tags:
             data['tags'] = self.tags
         if self.project_id:
             data['projectId'] = self.project_id
-        if self.modified_time:
-            data['modifiedTime'] = self.modified_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        if self.created_time:
-            data['createdTime'] = self.created_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
         if self.etag:
             data['etag'] = self.etag
         if self.creator:

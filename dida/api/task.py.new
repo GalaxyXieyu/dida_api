@@ -141,14 +141,6 @@ class TaskAPI(BaseAPI):
                     # 如果还是失败，返回原始字符串，但不打印warning
                     return date_str
 
-        # 处理子任务
-        children = []
-        if task_data.get('items'):
-            for item in task_data['items']:
-                # 递归处理每个子任务
-                child_task = self._simplify_task_data(item)
-                children.append(child_task)
-
         essential_fields = {
             'id': task_data.get('id'),
             'title': task_data.get('title'),
@@ -166,7 +158,7 @@ class TaskAPI(BaseAPI):
             'isAllDay': task_data.get('isAllDay'),
             'reminder': task_data.get('reminder'),
             'repeatFlag': task_data.get('repeatFlag'),
-            'items': children,  # 使用处理后的子任务列表
+            'items': task_data.get('items', []),
             'progress': task_data.get('progress', 0),
             'modifiedTime': format_date(task_data.get('modifiedTime')),
             'createdTime': format_date(task_data.get('createdTime')),
@@ -182,9 +174,7 @@ class TaskAPI(BaseAPI):
             'deleted': task_data.get('deleted', 0),
             'attachments': task_data.get('attachments', []),
             'imgMode': task_data.get('imgMode', 0),
-            'sortOrder': task_data.get('sortOrder', 0),
-            'parentId': task_data.get('parentId'),  # 保留父任务ID
-            'children': children  # 添加处理后的子任务列表
+            'sortOrder': task_data.get('sortOrder', 0)
         }
         
         return {k: v for k, v in essential_fields.items() if v is not None}
@@ -270,10 +260,8 @@ class TaskAPI(BaseAPI):
         # 获取所有已完成任务的信息
         completed_tasks_info = self._get_completed_tasks_info()
             
-        # 只处理任务类型，并创建任务ID到任务的映射
+        # 只处理任务类型
         tasks = []
-        task_map = {}
-        
         for task in tasks_data:
             if task.get('kind') == 'TEXT':
                 # 合并项目和标签信息
@@ -293,8 +281,7 @@ class TaskAPI(BaseAPI):
                         'columnId': task.get('columnId'),
                         'sortOrder': task.get('sortOrder'),
                         'tags': task.get('tags', []),
-                        'tagDetails': task.get('tagDetails', []),
-                        'parentId': task.get('parentId')  # 保留父任务ID
+                        'tagDetails': task.get('tagDetails', [])
                     }
                     # 更新任务信息
                     task.update(completed_task)
@@ -308,31 +295,17 @@ class TaskAPI(BaseAPI):
                 
                 # 简化数据结构
                 simplified_task = self._simplify_task_data(task)
-                # 初始化children列表
-                simplified_task['children'] = []
                 tasks.append(simplified_task)
-                task_map[simplified_task['id']] = simplified_task
-        
-        # 构建父子任务关系
-        root_tasks = []
-        for task in tasks:
-            parent_id = task.get('parentId')
-            if parent_id and parent_id in task_map:
-                # 将任务添加到父任务的children列表中
-                task_map[parent_id]['children'].append(task)
-            else:
-                # 如果没有父任务或父任务不在列表中，则为根任务
-                root_tasks.append(task)
         
         # 应用筛选条件
         if filters:
             filtered_tasks = []
-            for task in root_tasks:
+            for task in tasks:
                 if self._apply_filters(task, filters):
                     filtered_tasks.append(task)
             return filtered_tasks
             
-        return root_tasks
+        return tasks
     
     def get_all_notes(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -1155,125 +1128,4 @@ class TaskAPI(BaseAPI):
             completed_tasks.extend(response)
         
         # 简化数据结构
-        return [self._simplify_task_data(task) for task in completed_tasks]
-
-    def build_task_tree(self, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        将任务列表转换为树形结构
-        
-        Args:
-            tasks: 任务列表
-            
-        Returns:
-            List[Dict[str, Any]]: 树形结构的任务列表
-        """
-        # 创建任务ID到任务的映射
-        task_map = {task['id']: task for task in tasks}
-        
-        # 初始化每个任务的children列表
-        for task in tasks:
-            task['children'] = []
-            
-        # 构建父子关系
-        root_tasks = []
-        for task in tasks:
-            parent_id = task.get('parentId')
-            if parent_id and parent_id in task_map:
-                # 如果有父任务，将当前任务添加到父任务的children列表中
-                task_map[parent_id]['children'].append(task)
-            else:
-                # 如果没有父任务，这是一个根任务
-                root_tasks.append(task)
-                
-        return root_tasks
-        
-    def get_all_tasks_with_tree(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        获取所有任务，并组织成树形结构
-        
-        Args:
-            filters: 筛选条件
-            
-        Returns:
-            List[Dict[str, Any]]: 树形结构的任务列表
-        """
-        tasks = self.get_all_tasks(filters)
-        return self.build_task_tree(tasks)
-        
-    def get_this_week_tasks_with_tree(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取本周的任务，按完成状态分组，并组织成树形结构
-        
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
-        """
-        tasks = self.get_this_week_tasks()
-        return {
-            'completed': self.build_task_tree(tasks['completed']),
-            'uncompleted': self.build_task_tree(tasks['uncompleted'])
-        }
-        
-    def get_today_tasks_with_tree(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取今天的任务，按完成状态分组，并组织成树形结构
-        
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
-        """
-        tasks = self.get_today_tasks()
-        return {
-            'completed': self.build_task_tree(tasks['completed']),
-            'uncompleted': self.build_task_tree(tasks['uncompleted'])
-        }
-        
-    def get_this_month_tasks_with_tree(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取本月的任务，按完成状态分组，并组织成树形结构
-        
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
-        """
-        tasks = self.get_this_month_tasks()
-        return {
-            'completed': self.build_task_tree(tasks['completed']),
-            'uncompleted': self.build_task_tree(tasks['uncompleted'])
-        }
-        
-    def get_next_7_days_tasks_with_tree(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取未来7天的任务，按完成状态分组，并组织成树形结构
-        
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
-        """
-        tasks = self.get_next_7_days_tasks()
-        return {
-            'completed': self.build_task_tree(tasks['completed']),
-            'uncompleted': self.build_task_tree(tasks['uncompleted'])
-        }
-        
-    def get_tasks_by_priority_with_tree(self, priority: int = None) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        获取指定优先级的任务，按完成状态分组，并组织成树形结构
-        
-        Args:
-            priority: 优先级 (0-最低, 1-低, 3-中, 5-高)，None表示获取所有优先级
-            
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
-        """
-        tasks = self.get_tasks_by_priority(priority)
-        return {
-            'completed': self.build_task_tree(tasks['completed']),
-            'uncompleted': self.build_task_tree(tasks['uncompleted'])
-        }
-        
-    def get_overdue_tasks_with_tree(self) -> List[Dict[str, Any]]:
-        """
-        获取所有已过期但未完成的任务，并组织成树形结构
-        
-        Returns:
-            List[Dict[str, Any]]: 树形结构的过期任务列表
-        """
-        tasks = self.get_overdue_tasks()
-        return self.build_task_tree(tasks) 
+        return [self._simplify_task_data(task) for task in completed_tasks] 

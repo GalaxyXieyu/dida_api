@@ -32,26 +32,31 @@ check_command "python"
 check_command "pip"
 check_command "twine"
 check_command "git"
+check_command "curl"
 
 # 获取当前版本号
 current_version=$(grep 'version=' setup.py | cut -d'"' -f2)
 info "当前版本: $current_version"
 
-# 提示输入新版本号
-read -p "请输入新版本号 (直接回车使用自动递增): " new_version
+# 检查PyPI上是否已存在此版本
+check_version_exists() {
+    local version=$1
+    response=$(curl -s "https://pypi.org/pypi/didatodolist/json")
+    if echo "$response" | grep -q "\"$version\""; then
+        return 0 # 版本存在
+    else
+        return 1 # 版本不存在
+    fi
+}
 
-# 如果没有输入新版本号，自动递增最后一位
-if [ -z "$new_version" ]; then
-    IFS='.' read -r -a version_parts <<< "$current_version"
-    last_part=$((${version_parts[2]} + 1))
-    new_version="${version_parts[0]}.${version_parts[1]}.$last_part"
+# 检查当前版本是否已发布
+if check_version_exists "$current_version"; then
+    warning "版本 $current_version 已经发布到PyPI，无需重复发布"
+    warning "如果需要发布新版本，请先更新setup.py中的版本号"
+    exit 0
 fi
 
-info "准备发布版本 $new_version"
-
-# 更新版本号
-sed -i "s/version=\"$current_version\"/version=\"$new_version\"/" setup.py
-info "版本号已更新到 $new_version"
+info "版本 $current_version 尚未发布，开始发布流程..."
 
 # 清理旧的构建文件
 info "清理旧的构建文件..."
@@ -77,13 +82,13 @@ fi
 # 提交到Git
 info "提交到Git..."
 git add setup.py
-git commit -m "Release version $new_version"
-git tag "v$new_version"
+git commit -m "Release version $current_version"
+git tag "v$current_version"
 
 # 推送到远程仓库
 info "推送到远程仓库..."
-git push origin master
-git push origin "v$new_version"
+git push origin main
+git push origin "v$current_version"
 
 # 上传到PyPI
 info "上传到PyPI..."
@@ -96,7 +101,7 @@ fi
 info "安装新版本..."
 pip install --upgrade didatodolist
 
-info "发布完成！新版本 $new_version 已发布并安装"
+info "发布完成！新版本 $current_version 已发布并安装"
 
 # 显示当前安装的版本
 installed_version=$(pip show didatodolist | grep Version | cut -d' ' -f2)
