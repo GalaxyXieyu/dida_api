@@ -3,6 +3,7 @@
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import pytz
 from .base import BaseModel
 
 class Task(BaseModel):
@@ -52,7 +53,7 @@ class Task(BaseModel):
             project_id: 所属项目ID
             tags: 标签列表
             sort_order: 排序顺序
-            time_zone: 时区
+            time_zone: 时区，默认为Asia/Shanghai
             is_floating: 是否浮动
             is_all_day: 是否全天
             reminder: 提醒
@@ -76,12 +77,12 @@ class Task(BaseModel):
         self.content = content
         self.priority = priority
         self.status = status
-        self.start_date = self._parse_datetime(start_date)
-        self.due_date = self._parse_datetime(due_date)
+        self.time_zone = time_zone
+        self.start_date = self._parse_datetime_with_timezone(start_date)
+        self.due_date = self._parse_datetime_with_timezone(due_date)
         self.project_id = project_id
         self.tags = tags or []
         self.sort_order = sort_order
-        self.time_zone = time_zone
         self.is_floating = is_floating
         self.is_all_day = is_all_day
         self.reminder = reminder
@@ -90,16 +91,47 @@ class Task(BaseModel):
         self.ex_date = ex_date or []
         self.items = items or []
         self.progress = progress
-        self.modified_time = self._parse_datetime(modified_time)
+        self.modified_time = self._parse_datetime_with_timezone(modified_time)
         self.etag = etag
         self.deleted = deleted
-        self.created_time = self._parse_datetime(created_time)
+        self.created_time = self._parse_datetime_with_timezone(created_time)
         self.creator = creator
         self.attachments = attachments or []
         self.column_id = column_id
         self.kind = kind
         self.img_mode = img_mode
         super().__init__(**kwargs)
+    
+    def _parse_datetime_with_timezone(self, date_str: Optional[str]) -> Optional[datetime]:
+        """
+        解析时间字符串，并处理时区
+        
+        Args:
+            date_str: ISO格式的时间字符串
+            
+        Returns:
+            datetime: 转换后的datetime对象（带时区信息）
+        """
+        if not date_str:
+            return None
+            
+        try:
+            # 如果是ISO格式带时区的时间
+            if 'T' in date_str and ('+' in date_str or 'Z' in date_str):
+                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = pytz.UTC.localize(dt)
+            else:
+                # 如果是普通格式的时间字符串，假设是UTC时间
+                dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                dt = pytz.UTC.localize(dt)
+            
+            # 转换到目标时区
+            local_tz = pytz.timezone(self.time_zone)
+            return dt.astimezone(local_tz)
+        except Exception as e:
+            print(f"Warning: Failed to parse datetime {date_str}: {e}")
+            return None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Task':
@@ -140,12 +172,14 @@ class Task(BaseModel):
             column_id=data.get('columnId', ''),
             kind=data.get('kind', 'TEXT'),
             img_mode=data.get('imgMode', 0),
-            id=data.get('id')
+            id=data.get('id'),
+            created=data.get('created'),
+            modified=data.get('modified')
         )
     
     def to_dict(self) -> Dict[str, Any]:
         """
-        将任务转换为API请求数据
+        将任务转换为API请求数据，时间会被转换为UTC时区
         
         Returns:
             Dict: API请求数据
@@ -169,19 +203,23 @@ class Task(BaseModel):
             'imgMode': self.img_mode
         }
         
-        # 只在有值时添加可选字段
+        # 转换时间为UTC时区
+        if self.start_date:
+            utc_start = self.start_date.astimezone(pytz.UTC)
+            data['startDate'] = utc_start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            
+        if self.due_date:
+            utc_due = self.due_date.astimezone(pytz.UTC)
+            data['dueDate'] = utc_due.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            
         if self.tags:
             data['tags'] = self.tags
-        if self.start_date:
-            data['startDate'] = self.start_date.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-        if self.due_date:
-            data['dueDate'] = self.due_date.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
         if self.project_id:
             data['projectId'] = self.project_id
         if self.modified_time:
-            data['modifiedTime'] = self.modified_time.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+            data['modifiedTime'] = self.modified_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
         if self.created_time:
-            data['createdTime'] = self.created_time.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+            data['createdTime'] = self.created_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
         if self.etag:
             data['etag'] = self.etag
         if self.creator:

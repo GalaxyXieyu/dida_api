@@ -7,5 +7,5 @@ from .models.task import Task
 from .models.project import Project
 from .models.tag import Tag
 
-__version__ = "0.1.2"
+__version__ = "0.1.20"
 __all__ = ['DidaClient', 'Task', 'Project', 'Tag']
