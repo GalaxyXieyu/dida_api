@@ -139,8 +139,8 @@ class TaskAPI(BaseAPI):
                         return local_dt.strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     # 如果还是失败，返回原始字符串，但不打印warning
-                return date_str
-
+                    return date_str
+                    
         # 处理子任务
         children = []
         if task_data.get('items'):
@@ -451,7 +451,7 @@ class TaskAPI(BaseAPI):
         if 'items' in task_data:
             task_data['kind'] = 'CHECKLIST'
         else:
-        task_data['kind'] = 'TEXT'
+            task_data['kind'] = 'TEXT'
             
         # 设置时区为北京时间
         task_data['timeZone'] = 'Asia/Shanghai'
@@ -716,7 +716,7 @@ class TaskAPI(BaseAPI):
         
         for task in all_tasks:
             task_date = self._parse_date(task.get('startDate')) or self._parse_date(task.get('dueDate'))
-                if task_date and today <= task_date < tomorrow:
+            if task_date and today <= task_date < tomorrow:
                 if self._is_task_completed(task):
                     if include_completed:
                         completed_tasks.append(task)
@@ -1032,11 +1032,11 @@ class TaskAPI(BaseAPI):
         
         # 遍历所有项目获取已完成任务
         for pid in project_ids:
-        params = {'limit': limit}
-        if from_time:
-            params['from'] = from_time
-        if to_time:
-            params['to'] = to_time
+            params = {'limit': limit}
+            if from_time:
+                params['from'] = from_time
+            if to_time:
+                params['to'] = to_time
             
             response = self._get(f"/api/v2/project/{pid}/completed/", params=params)
             completed_tasks.extend(response)
