@@ -51,4 +51,7 @@ Thumbs.db
 original_api/data/tasks_wide_table.csv
 
 # Logs
-*.log 
+*.log
+
+# New additions
+test.ipynb 
