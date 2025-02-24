@@ -81,7 +81,7 @@ class TaskAPI(BaseAPI):
         
     def _simplify_task_data(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        简化任务数据，只保留必要字段
+        简化任务数据，只保留必要字段。对于全天任务（时间为00:00:00），只调整截止时间到第二天00:00:00。
         
         Args:
             task_data: 原始任务数据
@@ -90,7 +90,7 @@ class TaskAPI(BaseAPI):
             Dict[str, Any]: 简化后的任务数据
         """
         # 处理日期格式
-        def format_date(date_str: Optional[str]) -> Optional[str]:
+        def format_date(date_str: Optional[str], is_due_date: bool = False) -> Optional[str]:
             if not date_str:
                 return None
             try:
@@ -126,6 +126,11 @@ class TaskAPI(BaseAPI):
                 
                 # 转换为北京时间
                 local_dt = dt.astimezone(local_tz)
+                
+                # 只对截止时间进行调整：如果是截止时间且时间为00:00:00，将日期调整到第二天
+                if is_due_date and local_dt.hour == 0 and local_dt.minute == 0 and local_dt.second == 0:
+                    local_dt = local_dt + timedelta(days=1)
+                
                 return local_dt.strftime("%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 # 如果所有尝试都失败，尝试解析其他可能的格式
@@ -136,6 +141,11 @@ class TaskAPI(BaseAPI):
                         dt = datetime.strptime(base_time, "%Y-%m-%dT%H:%M:%S")
                         dt = local_tz.localize(dt)
                         local_dt = dt.astimezone(local_tz)
+                        
+                        # 只对截止时间进行调整
+                        if is_due_date and local_dt.hour == 0 and local_dt.minute == 0 and local_dt.second == 0:
+                            local_dt = local_dt + timedelta(days=1)
+                            
                         return local_dt.strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     # 如果还是失败，返回原始字符串，但不打印warning
@@ -155,8 +165,8 @@ class TaskAPI(BaseAPI):
             'content': task_data.get('content'),
             'priority': task_data.get('priority'),
             'status': task_data.get('status'),
-            'startDate': format_date(task_data.get('startDate')),
-            'dueDate': format_date(task_data.get('dueDate')),
+            'startDate': format_date(task_data.get('startDate'), is_due_date=False),
+            'dueDate': format_date(task_data.get('dueDate'), is_due_date=True),
             'projectName': task_data.get('projectName'),
             'projectId': task_data.get('projectId'),
             'projectKind': task_data.get('projectKind'),
@@ -834,8 +844,9 @@ class TaskAPI(BaseAPI):
     
     def get_overdue_tasks(self) -> List[Dict[str, Any]]:
         """
-        获取所有已过期但未完成的任务，并组织成树形结构
-        
+        获取所有已过期但未完成的任务，并组织成树形结构。
+        对于全天任务（时间为00:00:00的任务），将在第二天才会被判定为过期。
+
         Returns:
             List[Dict[str, Any]]: 树形结构的过期任务列表
         """
@@ -846,8 +857,19 @@ class TaskAPI(BaseAPI):
         for task in tasks:
             if task.get('status') != 2:  # 未完成
                 due_date = self._parse_date(task.get('dueDate'))
-                if due_date and due_date < now:
-                    overdue_tasks.append(task)
+                if due_date:
+                    # 检查是否是全天任务（时间为00:00:00）
+                    is_all_day = (due_date.hour == 0 and due_date.minute == 0 and due_date.second == 0)
+                    
+                    if is_all_day:
+                        # 全天任务：如果当前时间超过了第二天的00:00:00，则任务过期
+                        next_day = due_date + timedelta(days=1)
+                        if now >= next_day:
+                            overdue_tasks.append(task)
+                    else:
+                        # 非全天任务：如果当前时间超过了截止时间，则任务过期
+                        if now > due_date:
+                            overdue_tasks.append(task)
                     
         return self.build_task_tree(overdue_tasks)
     
