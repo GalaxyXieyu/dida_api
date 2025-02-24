@@ -139,7 +139,7 @@ class TaskAPI(BaseAPI):
                         return local_dt.strftime("%Y-%m-%d %H:%M:%S")
                 except Exception:
                     # 如果还是失败，返回原始字符串，但不打印warning
-                    return date_str
+                return date_str
 
         # 处理子任务
         children = []
@@ -244,16 +244,23 @@ class TaskAPI(BaseAPI):
     
     def get_all_tasks(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        获取所有任务（不包含笔记）
+        获取所有任务（不包含笔记），并组织成树形结构
         
         Args:
             filters: 筛选条件
-                - status: 任务状态 (0-未完成, 2-已完成)
-                - priority: 优先级 (0-5)
-                - project_id: 项目ID
-                - tag_names: 标签名称列表
-                - start_date: 开始时间
-                - due_date: 截止时间
+            
+        Returns:
+            List[Dict[str, Any]]: 树形结构的任务列表
+        """
+        tasks = self._get_all_tasks_flat(filters)
+        return self.build_task_tree(tasks)
+
+    def _get_all_tasks_flat(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        获取所有任务的扁平列表（内部使用）
+        
+        Args:
+            filters: 筛选条件
                 
         Returns:
             List[Dict[str, Any]]: 任务列表
@@ -270,10 +277,8 @@ class TaskAPI(BaseAPI):
         # 获取所有已完成任务的信息
         completed_tasks_info = self._get_completed_tasks_info()
             
-        # 只处理任务类型，并创建任务ID到任务的映射
+        # 只处理任务类型
         tasks = []
-        task_map = {}
-        
         for task in tasks_data:
             if task.get('kind') == 'TEXT':
                 # 合并项目和标签信息
@@ -293,8 +298,7 @@ class TaskAPI(BaseAPI):
                         'columnId': task.get('columnId'),
                         'sortOrder': task.get('sortOrder'),
                         'tags': task.get('tags', []),
-                        'tagDetails': task.get('tagDetails', []),
-                        'parentId': task.get('parentId')  # 保留父任务ID
+                        'tagDetails': task.get('tagDetails', [])
                     }
                     # 更新任务信息
                     task.update(completed_task)
@@ -308,31 +312,17 @@ class TaskAPI(BaseAPI):
                 
                 # 简化数据结构
                 simplified_task = self._simplify_task_data(task)
-                # 初始化children列表
-                simplified_task['children'] = []
                 tasks.append(simplified_task)
-                task_map[simplified_task['id']] = simplified_task
-        
-        # 构建父子任务关系
-        root_tasks = []
-        for task in tasks:
-            parent_id = task.get('parentId')
-            if parent_id and parent_id in task_map:
-                # 将任务添加到父任务的children列表中
-                task_map[parent_id]['children'].append(task)
-            else:
-                # 如果没有父任务或父任务不在列表中，则为根任务
-                root_tasks.append(task)
         
         # 应用筛选条件
         if filters:
             filtered_tasks = []
-            for task in root_tasks:
+            for task in tasks:
                 if self._apply_filters(task, filters):
                     filtered_tasks.append(task)
             return filtered_tasks
             
-        return root_tasks
+        return tasks
     
     def get_all_notes(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -461,7 +451,7 @@ class TaskAPI(BaseAPI):
         if 'items' in task_data:
             task_data['kind'] = 'CHECKLIST'
         else:
-            task_data['kind'] = 'TEXT'
+        task_data['kind'] = 'TEXT'
             
         # 设置时区为北京时间
         task_data['timeZone'] = 'Asia/Shanghai'
@@ -658,103 +648,29 @@ class TaskAPI(BaseAPI):
         response = self._post("/api/v2/batch/task", data)
         return True if response else False
     
-    def _apply_filters(self, item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+    def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
         """
-        应用筛选条件
+        统一解析日期字符串为datetime对象
         
         Args:
-            item: 任务或笔记数据
-            filters: 筛选条件
+            date_str: 日期字符串
             
         Returns:
-            bool: 是否匹配筛选条件
+            Optional[datetime]: 解析后的datetime对象，解析失败返回None
         """
-        for key, value in filters.items():
-            # 基础筛选
-            if key == 'status' and item.get('status') != value:
-                return False
-            elif key == 'priority' and item.get('priority') != value:
-                return False
-            elif key == 'project_id' and item.get('projectId') != value:
-                return False
-            elif key == 'project_name' and value.lower() not in item.get('projectName', '').lower():
-                return False
-            elif key == 'column_id' and item.get('columnId') != value:
-                return False
+        if not date_str:
+            return None
             
-            # 标签筛选
-            elif key == 'tag_names':
-                if isinstance(value, str):  # 如果是单个标签
-                    value = [value]
-                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
-                # 检查是否包含任意一个标签（OR关系）
-                if not any(tag.lower() in item_tags for tag in value):
-                    return False
-            elif key == 'tag_names_all':  # 必须包含所有指定标签（AND关系）
-                if isinstance(value, str):
-                    value = [value]
-                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
-                # 检查是否包含所有标签
-                if not all(tag.lower() in item_tags for tag in value):
-                    return False
-            
-            # 日期筛选
-            elif key == 'start_date' and item.get('startDate'):
-                if datetime.strptime(item['startDate'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            elif key == 'due_date' and item.get('dueDate'):
-                if datetime.strptime(item['dueDate'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            elif key == 'has_due_date' and bool(item.get('dueDate')) != value:
-                return False
-            elif key == 'has_start_date' and bool(item.get('startDate')) != value:
-                return False
-            
-            # 完成状态筛选
-            elif key == 'is_completed' and item.get('isCompleted') != value:
-                return False
-            
-            # 进度筛选
-            elif key == 'min_progress' and item.get('progress', 0) < value:
-                return False
-            elif key == 'max_progress' and item.get('progress', 0) > value:
-                return False
-            
-            # 模糊搜索
-            elif key == 'keyword':
-                keyword = str(value).lower()
-                title = item.get('title', '').lower()
-                content = item.get('content', '').lower()
-                project_name = item.get('projectName', '').lower()
-                tags = ' '.join(tag['name'].lower() for tag in item.get('tagDetails', []))
-                if keyword not in title and keyword not in content and keyword not in project_name and keyword not in tags:
-                    return False
-            
-            # 创建时间筛选
-            elif key == 'created_after' and item.get('createdTime'):
-                if datetime.strptime(item['createdTime'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            elif key == 'created_before' and item.get('createdTime'):
-                if datetime.strptime(item['createdTime'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            
-            # 修改时间筛选
-            elif key == 'modified_after' and item.get('modifiedTime'):
-                if datetime.strptime(item['modifiedTime'], "%Y-%m-%d %H:%M:%S") < datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            elif key == 'modified_before' and item.get('modifiedTime'):
-                if datetime.strptime(item['modifiedTime'], "%Y-%m-%d %H:%M:%S") > datetime.strptime(value, "%Y-%m-%d %H:%M:%S"):
-                    return False
-            
-            # 子任务筛选
-            elif key == 'has_items' and bool(item.get('items')) != value:
-                return False
-            elif key == 'min_items' and len(item.get('items', [])) < value:
-                return False
-            elif key == 'max_items' and len(item.get('items', [])) > value:
-                return False
-            
-        return True
+        try:
+            # 尝试ISO格式
+            return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
+        except ValueError:
+            try:
+                # 尝试标准格式
+                return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                print(f"Warning: Unrecognized date format: {date_str}")
+                return None
     
     def get_tasks_by_date_range(self, start_date: datetime, end_date: datetime, include_completed: bool = True) -> List[Dict[str, Any]]:
         """
@@ -772,7 +688,8 @@ class TaskAPI(BaseAPI):
         filtered_tasks = []
         
         for task in tasks:
-            task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('startDate') or task.get('dueDate') else None
+            # 优先使用开始时间，如果没有则使用截止时间
+            task_date = self._parse_date(task.get('startDate')) or self._parse_date(task.get('dueDate'))
             if task_date and start_date <= task_date <= end_date:
                 if include_completed or task.get('status') != 2:
                     filtered_tasks.append(task)
@@ -781,35 +698,25 @@ class TaskAPI(BaseAPI):
     
     def get_today_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取今天的任务，按完成状态分组
+        获取今天的任务，按完成状态分组，并组织成树形结构
         
         Args:
             include_completed: 是否包含已完成的任务
             
         Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
         """
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow = today + timedelta(days=1)
         
         # 获取所有任务
-        all_tasks = self.get_all_tasks()
+        all_tasks = self._get_all_tasks_flat()
         uncompleted_tasks = []
         completed_tasks = []
         
         for task in all_tasks:
-            try:
-                # 尝试第一种格式
-                task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%dT%H:%M:%S.000+0000")
-            except (ValueError, TypeError):
-                try:
-                    # 尝试第二种格式
-                    task_date = datetime.strptime(task.get('startDate', task.get('dueDate')), "%Y-%m-%d %H:%M:%S")
-                except (ValueError, TypeError):
-                    # 如果两种格式都不匹配，或者没有日期，跳过这个任务
-                    continue
-                    
-            if today <= task_date < tomorrow:
+            task_date = self._parse_date(task.get('startDate')) or self._parse_date(task.get('dueDate'))
+                if task_date and today <= task_date < tomorrow:
                 if self._is_task_completed(task):
                     if include_completed:
                         completed_tasks.append(task)
@@ -817,19 +724,19 @@ class TaskAPI(BaseAPI):
                     uncompleted_tasks.append(task)
                 
         return {
-            'completed': completed_tasks,
-            'uncompleted': uncompleted_tasks
+            'completed': self.build_task_tree(completed_tasks),
+            'uncompleted': self.build_task_tree(uncompleted_tasks)
         }
     
     def get_this_week_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取本周的任务，按完成状态分组
+        获取本周的任务，按完成状态分组，并组织成树形结构
         
         Args:
             include_completed: 是否包含已完成的任务
             
         Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
         """
         today = datetime.now()
         monday = today - timedelta(days=today.weekday())
@@ -837,7 +744,7 @@ class TaskAPI(BaseAPI):
         next_monday = monday + timedelta(days=7)
         
         # 获取所有未完成任务
-        uncompleted_tasks = self.get_all_tasks()
+        uncompleted_tasks = self._get_all_tasks_flat()
         
         # 如果需要包含已完成任务，则获取本周完成的任务
         completed_tasks = []
@@ -853,38 +760,24 @@ class TaskAPI(BaseAPI):
         # 过滤本周的任务
         week_tasks = []
         for task in uncompleted_tasks:
-            date_str = task.get('startDate', task.get('dueDate'))
-            if not date_str:
-                continue
-                
-            try:
-                # 尝试第一种格式
-                task_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
-            except ValueError:
-                try:
-                    # 尝试第二种格式
-                    task_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    # 如果两种格式都不匹配，跳过这个任务
-                    continue
-                    
-            if monday <= task_date < next_monday:
+            task_date = self._parse_date(task.get('startDate')) or self._parse_date(task.get('dueDate'))
+            if task_date and monday <= task_date < next_monday:
                 week_tasks.append(task)
                 
         return {
-            'completed': completed_tasks,
-            'uncompleted': week_tasks
+            'completed': self.build_task_tree(completed_tasks),
+            'uncompleted': self.build_task_tree(week_tasks)
         }
     
     def get_this_month_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取本月的任务，按完成状态分组
+        获取本月的任务，按完成状态分组，并组织成树形结构
         
         Args:
             include_completed: 是否包含已完成的任务
             
         Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
         """
         today = datetime.now()
         first_day = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -894,7 +787,7 @@ class TaskAPI(BaseAPI):
             next_first_day = today.replace(month=today.month + 1, day=1)
             
         # 获取所有未完成任务
-        uncompleted_tasks = self.get_all_tasks()
+        uncompleted_tasks = self._get_all_tasks_flat()
         
         # 如果需要包含已完成任务，则获取本月完成的任务
         completed_tasks = []
@@ -910,78 +803,72 @@ class TaskAPI(BaseAPI):
         # 过滤本月的任务
         month_tasks = []
         for task in uncompleted_tasks:
-            date_str = task.get('startDate', task.get('dueDate'))
-            if not date_str:
-                continue
-                
-            try:
-                # 尝试第一种格式
-                task_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.000+0000")
-            except ValueError:
-                try:
-                    # 尝试第二种格式
-                    task_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    # 如果两种格式都不匹配，跳过这个任务
-                    continue
-                    
-            if first_day <= task_date < next_first_day:
+            task_date = self._parse_date(task.get('startDate')) or self._parse_date(task.get('dueDate'))
+            if task_date and first_day <= task_date < next_first_day:
                 month_tasks.append(task)
                 
         return {
-            'completed': completed_tasks,
-            'uncompleted': month_tasks
+            'completed': self.build_task_tree(completed_tasks),
+            'uncompleted': self.build_task_tree(month_tasks)
         }
     
     def get_next_7_days_tasks(self, include_completed: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取未来7天的任务，按完成状态分组
+        获取未来7天的任务，按完成状态分组，并组织成树形结构
         
         Args:
             include_completed: 是否包含已完成的任务
             
         Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
         """
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         next_week = today + timedelta(days=7)
         
         tasks = self.get_tasks_by_date_range(today, next_week, include_completed)
-        return self._group_tasks_by_status(tasks)
+        grouped_tasks = self._group_tasks_by_status(tasks)
+        return {
+            'completed': self.build_task_tree(grouped_tasks['completed']),
+            'uncompleted': self.build_task_tree(grouped_tasks['uncompleted'])
+        }
     
     def get_overdue_tasks(self) -> List[Dict[str, Any]]:
         """
-        获取所有已过期但未完成的任务
+        获取所有已过期但未完成的任务，并组织成树形结构
         
         Returns:
-            List[Dict[str, Any]]: 过期任务列表
+            List[Dict[str, Any]]: 树形结构的过期任务列表
         """
         now = datetime.now()
-        tasks = self.get_all_tasks()
+        tasks = self._get_all_tasks_flat()
         overdue_tasks = []
         
         for task in tasks:
             if task.get('status') != 2:  # 未完成
-                due_date = datetime.strptime(task.get('dueDate'), "%Y-%m-%dT%H:%M:%S.000+0000") if task.get('dueDate') else None
+                due_date = self._parse_date(task.get('dueDate'))
                 if due_date and due_date < now:
                     overdue_tasks.append(task)
                     
-        return overdue_tasks
+        return self.build_task_tree(overdue_tasks)
     
     def get_tasks_by_priority(self, priority: int = None) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取指定优先级的任务，按完成状态分组
+        获取指定优先级的任务，按完成状态分组，并组织成树形结构
         
         Args:
             priority: 优先级 (0-最低, 1-低, 3-中, 5-高)，None表示获取所有优先级
             
         Returns:
-            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的任务
+            Dict[str, List[Dict[str, Any]]]: 按完成状态分组的树形结构任务
         """
-        tasks = self.get_all_tasks()
+        tasks = self._get_all_tasks_flat()
         if priority is not None:
             tasks = [task for task in tasks if task.get('priority') == priority]
-        return self._group_tasks_by_status(tasks)
+        grouped_tasks = self._group_tasks_by_status(tasks)
+        return {
+            'completed': self.build_task_tree(grouped_tasks['completed']),
+            'uncompleted': self.build_task_tree(grouped_tasks['uncompleted'])
+        }
     
     def _group_tasks_by_status(self, tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -1145,11 +1032,11 @@ class TaskAPI(BaseAPI):
         
         # 遍历所有项目获取已完成任务
         for pid in project_ids:
-            params = {'limit': limit}
-            if from_time:
-                params['from'] = from_time
-            if to_time:
-                params['to'] = to_time
+        params = {'limit': limit}
+        if from_time:
+            params['from'] = from_time
+        if to_time:
+            params['to'] = to_time
             
             response = self._get(f"/api/v2/project/{pid}/completed/", params=params)
             completed_tasks.extend(response)
@@ -1173,33 +1060,20 @@ class TaskAPI(BaseAPI):
         # 初始化每个任务的children列表
         for task in tasks:
             task['children'] = []
-            
-        # 构建父子关系
+        
+        # 构建树形结构
         root_tasks = []
         for task in tasks:
             parent_id = task.get('parentId')
             if parent_id and parent_id in task_map:
-                # 如果有父任务，将当前任务添加到父任务的children列表中
+                # 如果有父任务，将当前任务添加到父任务的children中
                 task_map[parent_id]['children'].append(task)
             else:
-                # 如果没有父任务，这是一个根任务
+                # 如果没有父任务，则为根任务
                 root_tasks.append(task)
-                
+        
         return root_tasks
-        
-    def get_all_tasks_with_tree(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        获取所有任务，并组织成树形结构
-        
-        Args:
-            filters: 筛选条件
-            
-        Returns:
-            List[Dict[str, Any]]: 树形结构的任务列表
-        """
-        tasks = self.get_all_tasks(filters)
-        return self.build_task_tree(tasks)
-        
+
     def get_this_week_tasks_with_tree(self) -> Dict[str, List[Dict[str, Any]]]:
         """
         获取本周的任务，按完成状态分组，并组织成树形结构
@@ -1276,4 +1150,114 @@ class TaskAPI(BaseAPI):
             List[Dict[str, Any]]: 树形结构的过期任务列表
         """
         tasks = self.get_overdue_tasks()
-        return self.build_task_tree(tasks) 
+        return self.build_task_tree(tasks)
+
+    def _apply_filters(self, item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        """
+        应用筛选条件
+        
+        Args:
+            item: 任务或笔记数据
+            filters: 筛选条件
+            
+        Returns:
+            bool: 是否匹配筛选条件
+        """
+        for key, value in filters.items():
+            # 基础筛选
+            if key == 'status' and item.get('status') != value:
+                return False
+            elif key == 'priority' and item.get('priority') != value:
+                return False
+            elif key == 'project_id' and item.get('projectId') != value:
+                return False
+            elif key == 'project_name' and value.lower() not in item.get('projectName', '').lower():
+                return False
+            elif key == 'column_id' and item.get('columnId') != value:
+                return False
+            
+            # 标签筛选
+            elif key == 'tag_names':
+                if isinstance(value, str):  # 如果是单个标签
+                    value = [value]
+                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
+                # 检查是否包含任意一个标签（OR关系）
+                if not any(tag.lower() in item_tags for tag in value):
+                    return False
+            elif key == 'tag_names_all':  # 必须包含所有指定标签（AND关系）
+                if isinstance(value, str):
+                    value = [value]
+                item_tags = {tag['name'].lower() for tag in item.get('tagDetails', [])}
+                # 检查是否包含所有标签
+                if not all(tag.lower() in item_tags for tag in value):
+                    return False
+            
+            # 日期筛选
+            elif key == 'start_date' and item.get('startDate'):
+                item_date = self._parse_date(item['startDate'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date < filter_date:
+                    return False
+            elif key == 'due_date' and item.get('dueDate'):
+                item_date = self._parse_date(item['dueDate'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date > filter_date:
+                    return False
+            elif key == 'has_due_date' and bool(item.get('dueDate')) != value:
+                return False
+            elif key == 'has_start_date' and bool(item.get('startDate')) != value:
+                return False
+            
+            # 完成状态筛选
+            elif key == 'is_completed' and item.get('isCompleted') != value:
+                return False
+            
+            # 进度筛选
+            elif key == 'min_progress' and item.get('progress', 0) < value:
+                return False
+            elif key == 'max_progress' and item.get('progress', 0) > value:
+                return False
+            
+            # 模糊搜索
+            elif key == 'keyword':
+                keyword = str(value).lower()
+                title = item.get('title', '').lower()
+                content = item.get('content', '').lower()
+                project_name = item.get('projectName', '').lower()
+                tags = ' '.join(tag['name'].lower() for tag in item.get('tagDetails', []))
+                if keyword not in title and keyword not in content and keyword not in project_name and keyword not in tags:
+                    return False
+            
+            # 创建时间筛选
+            elif key == 'created_after' and item.get('createdTime'):
+                item_date = self._parse_date(item['createdTime'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date < filter_date:
+                    return False
+            elif key == 'created_before' and item.get('createdTime'):
+                item_date = self._parse_date(item['createdTime'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date > filter_date:
+                    return False
+            
+            # 修改时间筛选
+            elif key == 'modified_after' and item.get('modifiedTime'):
+                item_date = self._parse_date(item['modifiedTime'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date < filter_date:
+                    return False
+            elif key == 'modified_before' and item.get('modifiedTime'):
+                item_date = self._parse_date(item['modifiedTime'])
+                filter_date = self._parse_date(value)
+                if not item_date or not filter_date or item_date > filter_date:
+                    return False
+            
+            # 子任务筛选
+            elif key == 'has_items' and bool(item.get('items')) != value:
+                return False
+            elif key == 'min_items' and len(item.get('items', [])) < value:
+                return False
+            elif key == 'max_items' and len(item.get('items', [])) > value:
+                return False
+            
+        return True 
