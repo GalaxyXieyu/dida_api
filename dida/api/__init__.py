@@ -5,5 +5,6 @@
 from .task import TaskAPI
 from .project import ProjectAPI
 from .tag import TagAPI
+from .tasksv2 import TaskAPIV2
 
-__all__ = ["TaskAPI", "ProjectAPI", "TagAPI"]
+__all__ = ["TaskAPI", "ProjectAPI", "TagAPI", "TaskAPIV2"]

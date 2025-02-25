@@ -7,7 +7,7 @@ from .base import BaseAPI
 from ..models.task import Task
 import pytz
 
-class TaskAPI(BaseAPI):
+class TaskAPIV2(BaseAPI):
     """任务和笔记相关的API实现"""
     
     def __init__(self, *args, **kwargs):
@@ -846,7 +846,7 @@ class TaskAPI(BaseAPI):
         """
         获取所有已过期但未完成的任务，并组织成树形结构。
         对于全天任务（时间为00:00:00的任务），将在第二天才会被判定为过期。
-
+        
         Returns:
             List[Dict[str, Any]]: 树形结构的过期任务列表
         """

@@ -37,6 +37,7 @@ check_command "curl"
 # 获取当前版本号
 current_version=$(grep 'version=' setup.py | cut -d'"' -f2)
 info "当前版本: $current_version"
+echo "调试信息: 从setup.py中获取的版本号是: $current_version"
 
 # 检查PyPI上是否已存在此版本
 check_version_exists() {
