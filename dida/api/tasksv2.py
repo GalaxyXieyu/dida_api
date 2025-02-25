@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pytz
 from .base import BaseAPI
 
-class TaskAPI(BaseAPI):
+class TaskAPIV2(BaseAPI):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._completed_columns = set()  # 存储已完成状态的栏目ID
