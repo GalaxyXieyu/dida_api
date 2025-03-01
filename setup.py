@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="didatodolist",
-    version="0.2.0",
+    version="0.2.1",
     author="xieyu",
     author_email="523018705@qq.com",
     description="滴答清单(TickTick/Dida365) Python SDK",
