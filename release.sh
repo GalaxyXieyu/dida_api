@@ -27,12 +27,44 @@ check_command() {
     fi
 }
 
+# 检查并创建 .pypirc 文件
+check_pypirc() {
+    if [ ! -f ~/.pypirc ]; then
+        info "未找到 .pypirc 文件，准备创建..."
+        
+        # 提示用户输入 PyPI token
+        echo -n "请输入您的 PyPI API token: "
+        read -s PYPI_TOKEN
+        echo
+
+        # 创建 .pypirc 文件
+        cat > ~/.pypirc << EOF
+[distutils]
+index-servers =
+    pypi
+
+[pypi]
+username = __token__
+password = ${PYPI_TOKEN}
+EOF
+
+        # 设置适当的权限
+        chmod 600 ~/.pypirc
+        info "已创建 .pypirc 文件并设置权限"
+    else
+        info "检测到 .pypirc 文件已存在"
+    fi
+}
+
 # 检查必要的命令
 check_command "python"
 check_command "pip"
 check_command "twine"
 check_command "git"
 check_command "curl"
+
+# 检查 .pypirc 文件
+check_pypirc
 
 # 获取当前版本号
 current_version=$(grep 'version=' setup.py | cut -d'"' -f2)
