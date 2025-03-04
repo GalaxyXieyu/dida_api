@@ -25,6 +25,7 @@ wheels/
 .vscode/
 *.swp
 *.swo
+.cursorrules
 
 # 环境
 .env
@@ -53,5 +54,12 @@ original_api/data/tasks_wide_table.csv
 # Logs
 *.log
 
-# New additions
-test.ipynb 
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# 发布相关
+release.sh
+=*.*.* 
+=*.*
+didatodolist.egg-info/
